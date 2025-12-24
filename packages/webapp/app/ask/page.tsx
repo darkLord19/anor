@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import styles from './page.module.css';
 import { AnswerCard } from '@/components/AnswerCard';
@@ -37,7 +37,7 @@ interface GoogleStatus {
 }
 
 
-export default function AskPage() {
+function AskPageContent() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<AskResponse | null>(null);
@@ -94,7 +94,6 @@ export default function AskPage() {
         setUser(sessionData.user);
         
         // Check Google connection status
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
         checkGoogleConnection(sessionData.accessToken);
       } catch (error) {
         console.error('[ASK PAGE] Auth check error:', error);
@@ -372,5 +371,28 @@ export default function AskPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function AskPage() {
+  return (
+    <Suspense fallback={
+      <main className={styles.main}>
+        <header className={styles.header}>
+          <div className={styles.logo}>
+            <span className={styles.logoIcon}>✦</span>
+            Anor
+          </div>
+        </header>
+        <div className={styles.container}>
+          <div className={styles.loadingState}>
+            <span className={styles.spinner} />
+            <p>Loading...</p>
+          </div>
+        </div>
+      </main>
+    }>
+      <AskPageContent />
+    </Suspense>
   );
 }

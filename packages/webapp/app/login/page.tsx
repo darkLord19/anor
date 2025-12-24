@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import styles from './page.module.css';
-import { login, signup, loginWithGoogle, loginWithMagicLink } from './actions';
+import { signup, loginWithGoogle, loginWithMagicLink } from './actions';
 
 type AuthMode = 'login' | 'signup' | 'magic';
 

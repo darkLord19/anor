@@ -148,7 +148,7 @@ export async function accountRoutes(fastify: FastifyInstance): Promise<void> {
   // Sign out
   fastify.post('/account/signout', {
     preHandler: verifyJWT,
-  }, async (request, reply) => {
+  }, async (_request, _reply) => {
     // Sign out is handled client-side by clearing cookies
     // This endpoint just confirms the request is authenticated
     return { success: true };

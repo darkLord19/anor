@@ -32,6 +32,13 @@ chrome.runtime.onInstalled.addListener(async () => {
   await initSession();
 });
 
+// Open side panel when extension icon is clicked
+chrome.action.onClicked.addListener(async (tab) => {
+  if (tab.id) {
+    await chrome.sidePanel.open({ tabId: tab.id });
+  }
+});
+
 // Handle messages from popup and content scripts
 chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
   handleMessage(message)

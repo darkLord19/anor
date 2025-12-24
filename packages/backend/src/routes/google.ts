@@ -4,7 +4,6 @@ import { verifyJWT, type AuthenticatedRequest } from '../middleware/auth.js';
 import { createUserClient, supabaseAdmin } from '../lib/supabase.js';
 import { getGoogleAuthUrl, exchangeCodeForTokens } from '../lib/calendar.js';
 import { encryptTokens } from '../lib/encryption.js';
-import { google } from 'googleapis';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
@@ -138,7 +137,7 @@ export async function googleRoutes(fastify: FastifyInstance): Promise<void> {
       }, 'Tokens received from Google');
 
       if (!tokens.access_token || !tokens.refresh_token) {
-        fastify.log.error('Missing tokens from Google', { tokens });
+        fastify.log.error({ tokens }, 'Missing tokens from Google');
         return reply.code(400).send({ error: 'Failed to get tokens from Google' });
       }
 
@@ -158,7 +157,7 @@ export async function googleRoutes(fastify: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: 'Failed to get user info from Google' });
       }
 
-      const userInfo = await userInfoResponse.json();
+      const userInfo = await userInfoResponse.json() as { email?: string };
       const googleEmail = userInfo.email;
 
       if (!googleEmail) {

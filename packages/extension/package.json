@@ -10,6 +10,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@anor/ui": "workspace:*",
     "@supabase/supabase-js": "^2.39.0"
   },
   "devDependencies": {

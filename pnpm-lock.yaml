@@ -51,6 +51,9 @@ importers:
 
   packages/extension:
     dependencies:
+      '@anor/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@supabase/supabase-js':
         specifier: ^2.39.0
         version: 2.89.0
@@ -68,8 +71,20 @@ importers:
         specifier: ^5.0.0
         version: 5.4.21(@types/node@20.19.27)
 
+  packages/ui:
+    devDependencies:
+      '@types/node':
+        specifier: ^20.10.0
+        version: 20.19.27
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+
   packages/webapp:
     dependencies:
+      '@anor/ui':
+        specifier: workspace:*
+        version: link:../ui
       '@supabase/ssr':
         specifier: ^0.1.0
         version: 0.1.0(@supabase/supabase-js@2.89.0)

@@ -3,10 +3,16 @@
   "name": "Anor",
   "version": "0.1.0",
   "description": "Privacy-first personal assistant",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
   "permissions": [
     "storage",
     "activeTab",
-    "identity"
+    "identity",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
@@ -17,8 +23,10 @@
     "type": "module"
   },
   "action": {
-    "default_popup": "popup/index.html",
     "default_title": "Anor"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/index.html"
   },
   "content_scripts": [
     {
@@ -31,11 +39,6 @@
       "js": ["content-whatsapp.js"],
       "run_at": "document_idle"
     }
-  ],
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  }
+  ]
 }
 

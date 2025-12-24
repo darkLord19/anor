@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
     return jsonResponse;
   }
 
-  const { data: { session: sessionData }, error: sessionError } = await supabase.auth.getSession();
+  const { data: { session: sessionData } } = await supabase.auth.getSession();
   
   if (sessionData && sessionData.user) {
     const jsonResponse = NextResponse.json({

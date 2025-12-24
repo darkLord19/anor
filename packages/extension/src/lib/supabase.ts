@@ -130,6 +130,60 @@ export async function signInWithOAuth() {
   });
 }
 
+// Sign in with email and password
+export async function signInWithPassword(email: string, password: string): Promise<User> {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error || !data.session) {
+    throw new Error(error?.message ?? 'Failed to sign in');
+  }
+
+  // Save session to storage
+  await saveSession({
+    access_token: data.session.access_token,
+    refresh_token: data.session.refresh_token,
+  });
+
+  return data.user;
+}
+
+// Sign up with email and password
+export async function signUp(email: string, password: string): Promise<{ user: User | null; error: string | null }> {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+  });
+
+  if (error) {
+    return { user: null, error: error.message };
+  }
+
+  // If session is created immediately, save it
+  if (data.session) {
+    await saveSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    });
+  }
+
+  return { user: data.user, error: null };
+}
+
+// Sign in with magic link (OTP)
+export async function signInWithMagicLink(email: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: chrome.identity.getRedirectURL(),
+    },
+  });
+
+  return { error: error?.message ?? null };
+}
+
 // Sign out
 export async function signOut() {
   await supabase.auth.signOut();
