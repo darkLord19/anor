@@ -83,6 +83,8 @@
   width: 100%;
   margin: 0 auto;
   padding: 2rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .form {
@@ -223,8 +225,14 @@
   align-items: center;
   justify-content: center;
   gap: 1rem;
-  padding: 4rem;
+  padding: 4rem 2rem;
+  min-height: 60vh;
   color: var(--text-secondary);
+}
+
+.loadingState p {
+  font-size: 1rem;
+  margin: 0;
 }
 
 .loadingState .spinner {

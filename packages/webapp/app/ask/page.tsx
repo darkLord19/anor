@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import styles from './page.module.css';
 import { AnswerCard } from '@/components/AnswerCard';
@@ -45,8 +45,26 @@ function AskPageContent() {
   const [extensionConnected, setExtensionConnected] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null);
   const [checkingGoogle, setCheckingGoogle] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
+  const hasCheckedRef = useRef(false);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  // Safety timeout to prevent infinite loading
+  useEffect(() => {
+    if (!checkingGoogle) return;
+    
+    const timeout = setTimeout(() => {
+      console.warn('[ASK PAGE] Safety timeout triggered - forcing loading state to false');
+      setCheckingGoogle(false);
+      if (!googleStatus) {
+        console.warn('[ASK PAGE] No Google status set, defaulting to not connected');
+        setGoogleStatus({ connected: false });
+      }
+    }, 12000); // 12 second max loading time (should be less than individual timeouts)
+
+    return () => clearTimeout(timeout);
+  }, [checkingGoogle, googleStatus]);
 
   const checkExtension = useCallback(async () => {
     try {
@@ -58,51 +76,158 @@ function AskPageContent() {
 
   const checkGoogleConnection = useCallback(async (accessToken: string) => {
     try {
-      const res = await fetch('http://localhost:3001/google/status', {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.warn('[ASK PAGE] Google status check timeout - aborting');
+        controller.abort();
+      }, 8000); // 8 second timeout
+      
+      console.log('[ASK PAGE] Checking Google connection status...');
+      
+      const res = await fetch(`${backendUrl}/google/status`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
         },
+        signal: controller.signal,
       });
       
+      clearTimeout(timeoutId);
+      
       if (res.ok) {
-        const status = await res.json();
-        setGoogleStatus(status);
+        try {
+          const status = await res.json();
+          console.log('[ASK PAGE] Google status received:', JSON.stringify(status));
+          
+          // Ensure status has at least connected property
+          if (status && typeof status === 'object') {
+            setGoogleStatus(status);
+            console.log('[ASK PAGE] Google status state updated');
+          } else {
+            console.warn('[ASK PAGE] Invalid status format, defaulting to not connected');
+            setGoogleStatus({ connected: false });
+          }
+        } catch (jsonError) {
+          console.error('[ASK PAGE] Failed to parse Google status response:', jsonError);
+          setGoogleStatus({ connected: false });
+        }
+      } else {
+        const errorText = await res.text().catch(() => 'Unknown error');
+        console.error('[ASK PAGE] Google status check failed:', res.status, res.statusText, errorText);
+        setGoogleStatus({ connected: false });
       }
     } catch (error) {
-      console.error('Failed to check Google status:', error);
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('[ASK PAGE] Google status check timed out after 8 seconds');
+      } else if (error instanceof Error && error.message.includes('fetch')) {
+        console.error('[ASK PAGE] Network error checking Google status:', error.message);
+      } else {
+        console.error('[ASK PAGE] Failed to check Google status:', error);
+      }
       setGoogleStatus({ connected: false });
     } finally {
-      setCheckingGoogle(false);
+      console.log('[ASK PAGE] Setting checkingGoogle to false');
+      setCheckingGoogle((prev) => {
+        if (prev) {
+          console.log('[ASK PAGE] Actually updating checkingGoogle from', prev, 'to false');
+        }
+        return false;
+      });
     }
   }, []);
 
   useEffect(() => {
+    if (hasCheckedRef.current) {
+      console.log('[ASK PAGE] Auth check already completed, skipping');
+      return;
+    }
+    
+    let isMounted = true;
+    hasCheckedRef.current = true;
+    
     const checkAuth = async () => {
       console.log('[ASK PAGE] Starting auth check');
       
       // Get session from Next.js API route (reads from cookies)
       try {
-        const sessionResponse = await fetch('/api/session');
+        const sessionController = new AbortController();
+        const sessionTimeout = setTimeout(() => sessionController.abort(), 5000); // 5 second timeout for session check
+        
+        const sessionResponse = await fetch('/api/session', {
+          signal: sessionController.signal,
+        });
+        
+        clearTimeout(sessionTimeout);
         
         if (!sessionResponse.ok) {
           console.log('[ASK PAGE] No session found, redirecting to login');
+          if (isMounted) {
+            setCheckingGoogle(false);
+            setGoogleStatus({ connected: false });
+            router.push('/login');
+          }
+          return;
+        }
+        
+        let sessionData;
+        try {
+          sessionData = await sessionResponse.json();
+        } catch (jsonError) {
+          console.error('[ASK PAGE] Failed to parse session response:', jsonError);
+          if (isMounted) {
+            setCheckingGoogle(false);
+            setGoogleStatus({ connected: false });
+            setInitError('Failed to parse session data. Please try logging in again.');
+          }
+          return;
+        }
+        
+        if (!isMounted) return;
+        
+        if (!sessionData || !sessionData.user || !sessionData.accessToken) {
+          console.error('[ASK PAGE] Invalid session data:', sessionData);
+          setCheckingGoogle(false);
+          setGoogleStatus({ connected: false });
           router.push('/login');
           return;
         }
         
-        const sessionData = await sessionResponse.json();
         setUser(sessionData.user);
         
         // Check Google connection status
-        checkGoogleConnection(sessionData.accessToken);
+        if (isMounted) {
+          await checkGoogleConnection(sessionData.accessToken);
+        }
       } catch (error) {
-        console.error('[ASK PAGE] Auth check error:', error);
-        router.push('/login');
+        if (!isMounted) return;
+        
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.error('[ASK PAGE] Session check timed out');
+        } else {
+          console.error('[ASK PAGE] Auth check error:', error);
+        }
+        
+        setCheckingGoogle(false);
+        setGoogleStatus({ connected: false });
+        setInitError('Failed to initialize. Please refresh the page.');
+        // Don't redirect on error, let user see the error state
       }
     };
 
-    checkAuth();
+    checkAuth().catch((error) => {
+      console.error('[ASK PAGE] Unhandled error in checkAuth:', error);
+      if (isMounted) {
+        setCheckingGoogle(false);
+        setGoogleStatus({ connected: false });
+        setInitError('Failed to initialize. Please refresh the page.');
+      }
+    });
+    
     checkExtension();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [router, checkExtension, checkGoogleConnection]);
 
   // Handle OAuth callback params
@@ -232,6 +357,16 @@ function AskPageContent() {
           </div>
           <div className={styles.headerRight}>
             <div className={styles.userMenu}>
+              <button 
+                onClick={() => router.push('/settings')} 
+                className={styles.settingsButton}
+                title="Settings"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"/>
+                </svg>
+              </button>
               <span className={styles.userEmail}>{user?.email}</span>
               <button onClick={handleSignOut} className={styles.signOutButton}>
                 Sign out
@@ -243,6 +378,11 @@ function AskPageContent() {
           <div className={styles.loadingState}>
             <span className={styles.spinner} />
             <p>Loading...</p>
+            {initError && (
+              <p style={{ marginTop: '1rem', color: 'var(--error)', fontSize: '0.875rem' }}>
+                {initError}
+              </p>
+            )}
           </div>
         </div>
       </main>
@@ -260,6 +400,16 @@ function AskPageContent() {
           </div>
           <div className={styles.headerRight}>
             <div className={styles.userMenu}>
+              <button 
+                onClick={() => router.push('/settings')} 
+                className={styles.settingsButton}
+                title="Settings"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"/>
+                </svg>
+              </button>
               <span className={styles.userEmail}>{user?.email}</span>
               <button onClick={handleSignOut} className={styles.signOutButton}>
                 Sign out
@@ -382,6 +532,20 @@ export default function AskPage() {
           <div className={styles.logo}>
             <span className={styles.logoIcon}>✦</span>
             Anor
+          </div>
+          <div className={styles.headerRight}>
+            <div className={styles.userMenu}>
+              <button 
+                onClick={() => window.location.href = '/settings'} 
+                className={styles.settingsButton}
+                title="Settings"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="3"/>
+                  <path d="M12 1v6m0 6v6M5.64 5.64l4.24 4.24m4.24 4.24l4.24 4.24M1 12h6m6 0h6M5.64 18.36l4.24-4.24m4.24-4.24l4.24-4.24"/>
+                </svg>
+              </button>
+            </div>
           </div>
         </header>
         <div className={styles.container}>

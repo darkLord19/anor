@@ -80,27 +80,19 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
-    // Check if token needs refresh
-    let accessToken = decryptedTokens.access_token;
-    const tokenExpiry = new Date(googleConnection.token_expires_at);
-    
-    if (tokenExpiry < new Date()) {
+    // Helper function to refresh and update Google token
+    async function refreshAndUpdateToken(): Promise<string> {
       fastify.log.info('Refreshing Google access token');
       try {
         const newTokens = await refreshAccessToken(decryptedTokens.refresh_token);
         
         if (!newTokens.access_token) {
-          return reply.code(400).send({
-            error: 'Failed to refresh Google token. Please reconnect your account.',
-            code: 'TOKEN_REFRESH_FAILED',
-          });
+          throw new Error('No access token returned from refresh');
         }
-        
-        accessToken = newTokens.access_token;
         
         // Encrypt and update stored token (using admin client)
         if (supabaseAdmin) {
-          const encryptedAccessToken = encrypt(accessToken);
+          const encryptedAccessToken = encrypt(newTokens.access_token);
           await supabaseAdmin
             .from('connections')
             .update({
@@ -108,11 +100,27 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
               token_expires_at: new Date(newTokens.expiry_date || Date.now() + 3600000).toISOString(),
             })
             .eq('user_id', authRequest.userId)
-            .eq('type', 'google')
-            .eq('user_id', authRequest.userId);
+            .eq('type', 'google');
         }
+        
+        return newTokens.access_token;
       } catch (error) {
         fastify.log.error(error, 'Failed to refresh Google token');
+        throw error;
+      }
+    }
+
+    // Check if token needs refresh
+    let accessToken = decryptedTokens.access_token;
+    const tokenExpiry = googleConnection.token_expires_at 
+      ? new Date(googleConnection.token_expires_at) 
+      : null;
+    
+    // Refresh if expired or if expiry is unknown (null)
+    if (!tokenExpiry || tokenExpiry < new Date()) {
+      try {
+        accessToken = await refreshAndUpdateToken();
+      } catch (error) {
         return reply.code(400).send({
           error: 'Failed to refresh Google token. Please reconnect your account.',
           code: 'TOKEN_REFRESH_FAILED',
@@ -138,12 +146,38 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
           const gmailPlan = await planGmailQuery(query);
           fastify.log.info({ gmailPlan }, 'Gmail query planned');
 
-          // Execute Gmail search
-          const gmailResults = await searchGmail(
-            accessToken,
-            gmailPlan.searchQuery,
-            gmailPlan.maxResults
-          );
+          // Execute Gmail search with retry on 401
+          let gmailResults;
+          try {
+            gmailResults = await searchGmail(
+              accessToken,
+              gmailPlan.searchQuery,
+              gmailPlan.maxResults
+            );
+          } catch (error: any) {
+            // If we get a 401, try refreshing the token and retry
+            const isUnauthorized = error?.code === 401 || 
+                                  error?.status === 401 || 
+                                  error?.response?.status === 401 ||
+                                  error?.response?.data?.error?.code === 401;
+            
+            if (isUnauthorized) {
+              fastify.log.info('Gmail API returned 401, refreshing token and retrying');
+              try {
+                accessToken = await refreshAndUpdateToken();
+                gmailResults = await searchGmail(
+                  accessToken,
+                  gmailPlan.searchQuery,
+                  gmailPlan.maxResults
+                );
+              } catch (refreshError) {
+                fastify.log.error(refreshError, 'Failed to refresh token after 401');
+                throw refreshError;
+              }
+            } else {
+              throw error;
+            }
+          }
           
           fastify.log.info({ count: gmailResults.messages.length }, 'Gmail search complete');
           results.push(...normalizeGmailResults(gmailResults.messages));
@@ -163,11 +197,37 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
             ? new Date(analysis.calendarDateRange.end) 
             : undefined;
 
-          const calendarResults = await getCalendarEvents(
-            accessToken,
-            startDate,
-            endDate
-          );
+          let calendarResults;
+          try {
+            calendarResults = await getCalendarEvents(
+              accessToken,
+              startDate,
+              endDate
+            );
+          } catch (error: any) {
+            // If we get a 401, try refreshing the token and retry
+            const isUnauthorized = error?.code === 401 || 
+                                  error?.status === 401 || 
+                                  error?.response?.status === 401 ||
+                                  error?.response?.data?.error?.code === 401;
+            
+            if (isUnauthorized) {
+              fastify.log.info('Calendar API returned 401, refreshing token and retrying');
+              try {
+                accessToken = await refreshAndUpdateToken();
+                calendarResults = await getCalendarEvents(
+                  accessToken,
+                  startDate,
+                  endDate
+                );
+              } catch (refreshError) {
+                fastify.log.error(refreshError, 'Failed to refresh token after 401');
+                throw refreshError;
+              }
+            } else {
+              throw error;
+            }
+          }
           
           fastify.log.info({ count: calendarResults.events.length }, 'Calendar fetch complete');
           results.push(...normalizeCalendarResults(calendarResults.events));

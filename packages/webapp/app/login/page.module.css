@@ -56,6 +56,7 @@
   border-radius: var(--radius);
   font-size: 0.9375rem;
   font-weight: 500;
+  font-family: var(--font-sans);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -109,6 +110,7 @@
   border-radius: var(--radius);
   color: var(--text-primary);
   font-size: 0.9375rem;
+  font-family: var(--font-sans);
   transition: all 0.2s ease;
 }
 
@@ -131,6 +133,7 @@
   border-radius: var(--radius);
   font-size: 0.9375rem;
   font-weight: 500;
+  font-family: var(--font-sans);
   cursor: pointer;
   transition: all 0.2s ease;
 }
