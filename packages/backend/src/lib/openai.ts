@@ -29,13 +29,13 @@ export const QueryAnalysisSchema = z.object({
   needsCalendar: z.boolean(),
   needsLinkedIn: z.boolean(),
   needsWhatsApp: z.boolean(),
-  gmailQuery: z.string().optional(),
+  gmailQuery: z.string().nullable().optional(), // Allow null when Gmail not needed
   calendarDateRange: z.object({
     start: z.string().optional(),
     end: z.string().optional(),
-  }).optional(),
-  linkedInKeywords: z.array(z.string()).optional(),
-  whatsAppKeywords: z.array(z.string()).optional(),
+  }).nullable().optional(),
+  linkedInKeywords: z.array(z.string()).nullable().optional(),
+  whatsAppKeywords: z.array(z.string()).nullable().optional(),
 });
 
 export type QueryAnalysis = z.infer<typeof QueryAnalysisSchema>;

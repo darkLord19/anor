@@ -24,9 +24,10 @@ export async function googleRoutes(fastify: FastifyInstance): Promise<void> {
     const authRequest = request as AuthenticatedRequest;
     const supabase = createUserClient(authRequest.accessToken);
 
+    // Get google connection (email comes from auth.users via getUser)
     const { data, error } = await supabase
       .from('google_connections')
-      .select('google_email, scopes, created_at, token_expires_at')
+      .select('scopes, created_at, token_expires_at')
       .eq('user_id', authRequest.userId)
       .single();
 
@@ -39,12 +40,19 @@ export async function googleRoutes(fastify: FastifyInstance): Promise<void> {
       return { connected: false };
     }
 
+    // Get user email from auth.users
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      fastify.log.error(userError, 'Failed to fetch user');
+      return reply.code(500).send({ error: 'Failed to fetch user info' });
+    }
+
     // Check if token is expired
     const isExpired = new Date(data.token_expires_at) < new Date();
 
     return {
       connected: true,
-      email: data.google_email,
+      email: user.email || null,
       scopes: data.scopes,
       connectedAt: data.created_at,
       needsRefresh: isExpired,
@@ -100,19 +108,15 @@ export async function googleRoutes(fastify: FastifyInstance): Promise<void> {
       // Exchange code for tokens
       const tokens = await exchangeCodeForTokens(code);
 
+      fastify.log.info({
+        hasAccessToken: !!tokens.access_token,
+        hasRefreshToken: !!tokens.refresh_token,
+        expiryDate: tokens.expiry_date,
+      }, 'Tokens received from Google');
+
       if (!tokens.access_token || !tokens.refresh_token) {
+        fastify.log.error('Missing tokens from Google', { tokens });
         return reply.code(400).send({ error: 'Failed to get tokens from Google' });
-      }
-
-      // Get user's Google email
-      const oauth2Client = new google.auth.OAuth2();
-      oauth2Client.setCredentials({ access_token: tokens.access_token });
-      const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-      const userInfo = await oauth2.userinfo.get();
-      const googleEmail = userInfo.data.email;
-
-      if (!googleEmail) {
-        return reply.code(400).send({ error: 'Could not get Google email' });
       }
 
       // Calculate expiry time
@@ -125,11 +129,12 @@ export async function googleRoutes(fastify: FastifyInstance): Promise<void> {
       });
 
       // Upsert the connection (using admin client since user isn't authenticated here)
+      // google_email is now nullable - email comes from user's auth account via profile join
       const { error: upsertError } = await supabaseAdmin
         .from('google_connections')
         .upsert({
           user_id: stateData.userId,
-          google_email: googleEmail,
+          google_email: null, // Email comes from auth.users via profile join
           access_token: encryptedTokens.access_token,
           refresh_token: encryptedTokens.refresh_token,
           token_expires_at: expiresAt.toISOString(),

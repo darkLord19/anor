@@ -90,8 +90,14 @@ export async function exchangeCodeForTokens(code: string): Promise<{
   refresh_token?: string | null;
   expiry_date?: number | null;
 }> {
-  const { tokens } = await oauth2Client.getToken(code);
-  return tokens;
+  const response = await oauth2Client.getToken(code);
+  console.log('[CALENDAR] getToken response:', {
+    hasTokens: !!response.tokens,
+    tokenKeys: response.tokens ? Object.keys(response.tokens) : [],
+    hasAccessToken: !!response.tokens?.access_token,
+    hasRefreshToken: !!response.tokens?.refresh_token,
+  });
+  return response.tokens;
 }
 
 // Refresh access token using refresh token
