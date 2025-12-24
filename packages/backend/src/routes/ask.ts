@@ -6,7 +6,7 @@ import { analyzeQuery, planGmailQuery } from '../lib/openai.js';
 import { searchGmail } from '../lib/gmail.js';
 import { getCalendarEvents, refreshAccessToken } from '../lib/calendar.js';
 import { normalizeGmailResults, normalizeCalendarResults, mergeResults } from '../lib/normalizer.js';
-import { synthesizeAnswer } from '../lib/synthesizer.js';
+import { synthesizeAnswer, type Answer } from '../lib/synthesizer.js';
 import { decryptTokens, encrypt } from '../lib/encryption.js';
 import type { SearchHit, PendingSearch, DOMInstruction } from '../types/search.js';
 
@@ -332,11 +332,18 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: 'Not authorized' });
     }
 
-    return {
+    const response: any = {
       status: pendingSearch.status,
       request_id: requestId,
       sources_needed: pendingSearch.sources_needed,
     };
+
+    // Include answer if complete
+    if (pendingSearch.status === 'complete' && pendingSearch.answer) {
+      response.answer = pendingSearch.answer;
+    }
+
+    return response;
   });
 
   // Submit DOM results from extension
@@ -380,8 +387,13 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
       const allResults = mergeResults(...Object.values(pendingSearch.results).filter(Boolean) as SearchHit[][]);
       const answer = await synthesizeAnswer(pendingSearch.query, allResults);
 
-      // Clean up
-      pendingSearches.delete(requestId);
+      // Store answer before cleanup (keep for a short time for polling)
+      pendingSearch.answer = answer;
+
+      // Clean up after a delay to allow polling
+      setTimeout(() => {
+        pendingSearches.delete(requestId);
+      }, 30000); // Keep for 30 seconds after completion
 
       return {
         status: 'complete',

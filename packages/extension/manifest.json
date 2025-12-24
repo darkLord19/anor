@@ -12,11 +12,14 @@
     "storage",
     "activeTab",
     "identity",
-    "sidePanel"
+    "sidePanel",
+    "tabs"
   ],
   "host_permissions": [
     "https://www.linkedin.com/*",
-    "https://web.whatsapp.com/*"
+    "https://web.whatsapp.com/*",
+    "http://localhost/*",
+    "https://localhost/*"
   ],
   "background": {
     "service_worker": "background.js",
@@ -28,6 +31,14 @@
   "side_panel": {
     "default_path": "sidepanel/index.html"
   },
+  "externally_connectable": {
+    "matches": [
+      "http://localhost:3000/*",
+      "https://localhost:3000/*"
+      // NOTE: For production, add your web app URL here, e.g.:
+      // "https://your-domain.com/*"
+    ]
+  },
   "content_scripts": [
     {
       "matches": ["https://www.linkedin.com/messaging/*"],
@@ -38,6 +49,17 @@
       "matches": ["https://web.whatsapp.com/*"],
       "js": ["content-whatsapp.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://localhost:3000/*",
+        "https://localhost:3000/*"
+        // NOTE: For production, add your web app URL here, e.g.:
+        // "https://your-domain.com/*"
+      ],
+      "js": ["content-webapp.js"],
+      "run_at": "document_start",
+      "all_frames": false
     }
   ]
 }

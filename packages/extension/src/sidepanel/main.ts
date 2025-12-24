@@ -205,6 +205,74 @@ signoutBtn.addEventListener('click', async () => {
   }
 });
 
+// Poll for ask results
+async function pollAskResults(requestId: string, token: string) {
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+  const maxAttempts = 60;
+  let attempts = 0;
+
+  const poll = async () => {
+    try {
+      const res = await fetch(`${API_URL}/ask/${requestId}/status`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        throw new Error(`Poll failed: ${res.status}`);
+      }
+
+      const statusData = await res.json();
+
+      if (statusData.status === 'complete') {
+        // Fetch the full answer
+        const answerRes = await fetch(`${API_URL}/ask/${requestId}/status`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        
+        if (answerRes.ok) {
+          const answerData = await answerRes.json();
+          if (answerData.answer) {
+            const answerCard = document.createElement('div');
+            answerCard.className = `answer-card ${answerData.answer.insufficient ? 'insufficient' : ''}`;
+            answerCard.innerHTML = `
+              <div class="answer-text">${answerData.answer.answer}</div>
+            `;
+            resultsDiv.innerHTML = '';
+            resultsDiv.appendChild(answerCard);
+            return;
+          }
+        }
+        
+        // Fallback
+        resultsDiv.innerHTML = '<div class="answer-card"><div class="answer-text">Search complete</div></div>';
+        return;
+      }
+
+      // Continue polling
+      attempts++;
+      if (attempts < maxAttempts) {
+        setTimeout(poll, 1000);
+      } else {
+        resultsDiv.innerHTML = '<div class="answer-card"><div class="answer-text">Search timed out. The tabs may still be loading. Please try again in a moment.</div></div>';
+      }
+    } catch (error) {
+      console.error('Poll error:', error);
+      attempts++;
+      if (attempts < maxAttempts) {
+        setTimeout(poll, 1000);
+      } else {
+        resultsDiv.innerHTML = `<div class="answer-card"><div class="answer-text">Error: ${error instanceof Error ? error.message : 'Failed to get results'}</div></div>`;
+      }
+    }
+  };
+
+  poll();
+}
+
 // Handle ask form
 askForm.addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -217,20 +285,49 @@ askForm.addEventListener('submit', async (e) => {
   resultsDiv.innerHTML = '<div class="answer-card"><div class="answer-text">Thinking...</div></div>';
   
   try {
-    const token = await chrome.runtime.sendMessage({ type: 'GET_TOKEN' });
+    const tokenResponse = await chrome.runtime.sendMessage({ type: 'GET_TOKEN' });
+    const token = tokenResponse.token;
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
     
     const response = await fetch(`${API_URL}/ask`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token.token}`,
+        'Authorization': `Bearer ${token}`,
       },
       body: JSON.stringify({ query }),
     });
     
     const data = await response.json();
     
+    // If extension is required, execute instructions
+    if (data.requires_extension && data.request_id && data.instructions) {
+      const sourcesNeeded = data.sources_needed || [];
+      const sourcesText = sourcesNeeded.join(' and ');
+      resultsDiv.innerHTML = `<div class="answer-card"><div class="answer-text">Opening ${sourcesText} tabs and searching... This may take a moment.</div></div>`;
+      
+      // Execute instructions via background script
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'EXECUTE_DOM_INSTRUCTIONS',
+          payload: {
+            request_id: data.request_id,
+            instructions: data.instructions,
+          },
+        });
+        
+        // Poll for results
+        pollAskResults(data.request_id, token);
+      } catch (error) {
+        console.error('Failed to execute instructions:', error);
+        resultsDiv.innerHTML = `<div class="answer-card"><div class="answer-text">Error: Failed to search. The extension will try to open the required tabs automatically.</div></div>`;
+        isSubmitting = false;
+        askSubmitBtn.disabled = false;
+      }
+      return;
+    }
+    
+    // Direct answer available
     if (data.answer) {
       const answerCard = document.createElement('div');
       answerCard.className = `answer-card ${data.answer.insufficient ? 'insufficient' : ''}`;

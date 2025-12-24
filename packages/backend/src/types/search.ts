@@ -38,5 +38,6 @@ export interface PendingSearch {
   results: Partial<Record<string, SearchHit[]>>;
   status: 'pending' | 'partial' | 'complete' | 'failed';
   created_at: Date;
+  answer?: Answer;
 }
 

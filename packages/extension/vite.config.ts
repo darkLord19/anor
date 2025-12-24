@@ -12,6 +12,7 @@ export default defineConfig({
         background: resolve(__dirname, 'src/background.ts'),
         'content-linkedin': resolve(__dirname, 'src/content/linkedin.ts'),
         'content-whatsapp': resolve(__dirname, 'src/content/whatsapp.ts'),
+        'content-webapp': resolve(__dirname, 'src/content/webapp.ts'),
         'sidepanel/index': resolve(__dirname, 'src/sidepanel/index.html'),
       },
       output: {

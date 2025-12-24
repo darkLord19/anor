@@ -62,7 +62,24 @@ export async function getInstructions(
   });
 }
 
-// Submit DOM search results to backend
+// Submit DOM search results to backend (for ask endpoint)
+export async function submitAskResults(
+  requestId: string,
+  source: string,
+  snippets: string[],
+  error?: string
+): Promise<ApiResponse<{ status: string }>> {
+  return fetchWithAuth(`/ask/${requestId}/dom-results`, {
+    method: 'POST',
+    body: JSON.stringify({
+      source,
+      snippets,
+      error,
+    }),
+  });
+}
+
+// Submit DOM search results to backend (for dom endpoint - legacy)
 export async function submitResults(
   requestId: string,
   source: string,
@@ -82,14 +99,24 @@ export async function submitResults(
 
 // Execute DOM instructions in parallel
 export async function executeDOMInstructions(
-  instructions: DOMInstruction[]
+  instructions: DOMInstruction[],
+  useAskEndpoint = true
 ): Promise<Map<string, string[]>> {
   const results = new Map<string, string[]>();
+
+  if (instructions.length === 0) {
+    return results;
+  }
+
+  // Get the request_id from the first instruction (all should have the same request_id)
+  const requestId = instructions[0]!.request_id;
 
   // Execute all instructions in parallel
   await Promise.all(
     instructions.map(async (instruction) => {
       try {
+        console.log(`[Anor API] Executing instruction for ${instruction.source} with keywords:`, instruction.keywords);
+        
         const response = await chrome.runtime.sendMessage({
           type: 'DOM_SEARCH',
           payload: {
@@ -99,25 +126,60 @@ export async function executeDOMInstructions(
           },
         });
 
-        results.set(instruction.source, response.snippets ?? []);
+        const snippets = response.snippets ?? [];
+        const error = response.error;
+        
+        console.log(`[Anor API] Search completed for ${instruction.source}: ${snippets.length} snippets${error ? `, error: ${error}` : ''}`);
+        
+        results.set(instruction.source, snippets);
 
-        // Submit results to backend
-        await submitResults(
-          instruction.request_id,
-          instruction.source,
-          response.snippets ?? [],
-          response.error
-        );
+        // Submit results to backend (use ask endpoint by default)
+        if (useAskEndpoint) {
+          const submitResult = await submitAskResults(
+            requestId,
+            instruction.source,
+            snippets,
+            error
+          );
+          
+          if (submitResult.error) {
+            console.error(`[Anor API] Failed to submit results for ${instruction.source}:`, submitResult.error);
+          } else {
+            console.log(`[Anor API] Results submitted successfully for ${instruction.source}`);
+          }
+        } else {
+          const submitResult = await submitResults(
+            requestId,
+            instruction.source,
+            snippets,
+            error
+          );
+          
+          if (submitResult.error) {
+            console.error(`[Anor API] Failed to submit results for ${instruction.source}:`, submitResult.error);
+          }
+        }
       } catch (error) {
+        console.error(`[Anor API] Error executing instruction for ${instruction.source}:`, error);
         results.set(instruction.source, []);
         
         // Submit error to backend
-        await submitResults(
-          instruction.request_id,
-          instruction.source,
-          [],
-          error instanceof Error ? error.message : 'Execution failed'
-        );
+        const errorMessage = error instanceof Error ? error.message : 'Execution failed';
+        if (useAskEndpoint) {
+          await submitAskResults(
+            requestId,
+            instruction.source,
+            [],
+            errorMessage
+          );
+        } else {
+          await submitResults(
+            requestId,
+            instruction.source,
+            [],
+            errorMessage
+          );
+        }
       }
     })
   );

@@ -57,10 +57,8 @@ function AskPageContent() {
     const timeout = setTimeout(() => {
       console.warn('[ASK PAGE] Safety timeout triggered - forcing loading state to false');
       setCheckingGoogle(false);
-      if (!googleStatus) {
-        console.warn('[ASK PAGE] No Google status set, defaulting to not connected');
-        setGoogleStatus({ connected: false });
-      }
+      // Don't set default status here - let the check complete or show error
+      // Only set to false if we're absolutely sure (check failed)
     }, 12000); // 12 second max loading time (should be less than individual timeouts)
 
     return () => clearTimeout(timeout);
@@ -68,11 +66,105 @@ function AskPageContent() {
 
   const checkExtension = useCallback(async () => {
     try {
-      setExtensionConnected(false);
+      // Check if extension is available by looking for the global variable
+      // or by sending a ping message
+      const isConnected = 
+        typeof window !== 'undefined' && 
+        (window as any).__ANOR_EXTENSION__ === true;
+      
+      if (isConnected) {
+        setExtensionConnected(true);
+        return;
+      }
+      
+      // Also try message-based check as fallback
+      const pingPromise = new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => resolve(false), 1000);
+        
+        const messageHandler = (event: MessageEvent) => {
+          if (event.data && event.data.type === 'ANOR_EXTENSION_PONG') {
+            clearTimeout(timeout);
+            window.removeEventListener('message', messageHandler);
+            // Store extension ID if provided
+            if (event.data.extensionId) {
+              (window as any).__ANOR_EXTENSION_ID__ = event.data.extensionId;
+              console.log('[ASK PAGE] Stored extension ID from ping:', event.data.extensionId);
+            }
+            resolve(event.data.extensionId !== null);
+          }
+        };
+        
+        window.addEventListener('message', messageHandler);
+        
+        // Send ping
+        window.postMessage({ type: 'ANOR_EXTENSION_PING' }, window.location.origin);
+      });
+      
+      const connected = await pingPromise;
+      setExtensionConnected(connected);
     } catch {
       setExtensionConnected(false);
     }
   }, []);
+
+  // Listen for extension context invalidated messages
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleContextInvalidated = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'ANOR_EXTENSION_CONTEXT_INVALIDATED') {
+        console.log('[ASK PAGE] Extension context invalidated - attempting direct messaging fallback');
+        
+        // Try direct messaging if we have the extension ID and payload
+        const extensionId = (window as any).__ANOR_EXTENSION_ID__;
+        const payload = event.data.payload;
+        
+        if (extensionId && payload && typeof chrome !== 'undefined' && chrome.runtime) {
+          console.log('[ASK PAGE] Attempting direct messaging with extension ID:', extensionId);
+          try {
+            chrome.runtime.sendMessage(
+              extensionId,
+              {
+                type: 'EXECUTE_DOM_INSTRUCTIONS',
+                payload: payload,
+              },
+              (response) => {
+                if (chrome.runtime.lastError) {
+                  console.warn('[ASK PAGE] Direct messaging also failed:', chrome.runtime.lastError.message);
+                  setExtensionConnected(false);
+                  // Re-check extension connection after a short delay
+                  setTimeout(() => {
+                    checkExtension();
+                  }, 1000);
+                } else {
+                  console.log('[ASK PAGE] Direct messaging succeeded!');
+                  setExtensionConnected(true);
+                }
+              }
+            );
+          } catch (error) {
+            console.error('[ASK PAGE] Direct messaging error:', error);
+            setExtensionConnected(false);
+            setTimeout(() => {
+              checkExtension();
+            }, 1000);
+          }
+        } else {
+          console.log('[ASK PAGE] No extension ID available for direct messaging');
+          setExtensionConnected(false);
+          // Re-check extension connection after a short delay
+          setTimeout(() => {
+            checkExtension();
+          }, 1000);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleContextInvalidated);
+    return () => {
+      window.removeEventListener('message', handleContextInvalidated);
+    };
+  }, [checkExtension]);
 
   const checkGoogleConnection = useCallback(async (accessToken: string) => {
     try {
@@ -223,10 +315,19 @@ function AskPageContent() {
       }
     });
     
+    // Check extension connection
     checkExtension();
+    
+    // Periodically re-check extension connection (in case it's installed after page load)
+    const extensionCheckInterval = setInterval(() => {
+      if (isMounted) {
+        checkExtension();
+      }
+    }, 3000); // Check every 3 seconds
     
     return () => {
       isMounted = false;
+      clearInterval(extensionCheckInterval);
     };
   }, [router, checkExtension, checkGoogleConnection]);
 
@@ -282,7 +383,90 @@ function AskPageContent() {
       const data = await res.json();
       setResponse(data);
 
-      if (data.requires_extension && data.request_id) {
+      if (data.requires_extension && data.request_id && data.instructions) {
+        console.log('[ASK PAGE] Extension required, instructions:', data.instructions);
+        
+        // Send instructions to extension if connected
+        if (extensionConnected && typeof window !== 'undefined') {
+          console.log('[ASK PAGE] Extension connected, sending instructions...');
+          
+          // Set up listener for extension context invalidated
+          const contextInvalidatedHandler = (event: MessageEvent) => {
+            if (event.data && event.data.type === 'ANOR_EXTENSION_CONTEXT_INVALIDATED') {
+              window.removeEventListener('message', contextInvalidatedHandler);
+              console.warn('[ASK PAGE] Extension context invalidated - extension may need to be reloaded');
+              setExtensionConnected(false);
+              // Still poll for results in case extension reconnects
+            }
+          };
+          window.addEventListener('message', contextInvalidatedHandler);
+          
+          try {
+            // Try to send message to extension - use direct messaging first, then fallback to window.postMessage
+            const message = {
+              type: 'EXECUTE_DOM_INSTRUCTIONS',
+              payload: {
+                request_id: data.request_id,
+                instructions: data.instructions,
+              },
+            };
+            
+            // Try direct messaging via chrome.runtime.sendMessage (requires externally_connectable)
+            // Check for extension ID from window object (set by content script)
+            let extensionId = (window as any).__ANOR_EXTENSION_ID__;
+            
+            // If no extension ID, try to get it by checking if extension is available
+            if (!extensionId && typeof chrome !== 'undefined' && chrome.runtime) {
+              // Can't get extension ID directly from web page, but we can try to detect it
+              // by attempting to send a message without ID (won't work, but we'll fallback)
+              console.log('[ASK PAGE] Extension ID not available, will use window.postMessage');
+            }
+            
+            if (extensionId && typeof chrome !== 'undefined' && chrome.runtime) {
+              console.log('[ASK PAGE] Attempting direct messaging to extension:', extensionId);
+              try {
+                chrome.runtime.sendMessage(
+                  extensionId,
+                  message,
+                  (response) => {
+                    if (chrome.runtime.lastError) {
+                      const errorMsg = chrome.runtime.lastError.message || 'Unknown error';
+                      console.warn('[ASK PAGE] Direct messaging failed, falling back to window.postMessage:', errorMsg);
+                      // Fallback to window.postMessage
+                      window.postMessage({
+                        type: 'ANOR_EXECUTE_INSTRUCTIONS',
+                        payload: message.payload,
+                      }, window.location.origin);
+                    } else {
+                      console.log('[ASK PAGE] Direct message sent successfully, response:', response);
+                    }
+                  }
+                );
+              } catch (directError) {
+                console.warn('[ASK PAGE] Direct messaging error, falling back to window.postMessage:', directError);
+                // Fallback to window.postMessage
+                window.postMessage({
+                  type: 'ANOR_EXECUTE_INSTRUCTIONS',
+                  payload: message.payload,
+                }, window.location.origin);
+              }
+            } else {
+              // No extension ID available or chrome.runtime not available, use window.postMessage
+              console.log('[ASK PAGE] Using window.postMessage (direct messaging not available)');
+              window.postMessage({
+                type: 'ANOR_EXECUTE_INSTRUCTIONS',
+                payload: message.payload,
+              }, window.location.origin);
+            }
+            console.log('[ASK PAGE] Message sent successfully');
+          } catch (error) {
+            console.error('[ASK PAGE] Failed to send instructions to extension:', error);
+          }
+        } else {
+          console.warn('[ASK PAGE] Extension not connected, cannot send instructions. extensionConnected:', extensionConnected);
+        }
+        
+        // Poll for results
         pollForResults(data.request_id, sessionData.accessToken);
       }
     } catch (error) {
@@ -303,20 +487,47 @@ function AskPageContent() {
   };
 
   const pollForResults = async (requestId: string, accessToken: string) => {
-    const maxAttempts = 30;
+    const maxAttempts = 60; // Increased timeout for extension searches
     let attempts = 0;
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
     const poll = async () => {
       try {
-        const res = await fetch(`http://localhost:3001/dom/results/${requestId}`, {
+        // Poll the ask endpoint for results
+        const res = await fetch(`${backendUrl}/ask/${requestId}/status`, {
           headers: {
             'Authorization': `Bearer ${accessToken}`,
           },
         });
 
-        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(`Poll failed: ${res.status}`);
+        }
 
-        if (data.status === 'complete' || attempts >= maxAttempts) {
+        const statusData = await res.json();
+
+        // If complete, fetch the full answer
+        if (statusData.status === 'complete') {
+          // Try to get the answer from the ask endpoint
+          const answerRes = await fetch(`${backendUrl}/ask/${requestId}/status`, {
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+            },
+          });
+          
+          if (answerRes.ok) {
+            const answerData = await answerRes.json();
+            if (answerData.answer) {
+              setResponse(prev => ({
+                ...prev!,
+                status: 'complete',
+                answer: answerData.answer,
+              }));
+              return;
+            }
+          }
+          
+          // Fallback: just mark as complete
           setResponse(prev => ({
             ...prev!,
             status: 'complete',
@@ -324,12 +535,39 @@ function AskPageContent() {
           return;
         }
 
-        attempts++;
-        setTimeout(poll, 1000);
-      } catch {
+        // Continue polling if not complete
         attempts++;
         if (attempts < maxAttempts) {
           setTimeout(poll, 1000);
+        } else {
+          // Timeout - show error
+          setResponse(prev => ({
+            ...prev!,
+            status: 'error',
+            answer: {
+              answer: 'Search timed out. The extension is opening the required tabs automatically - this may take a moment. Please try again in a few seconds.',
+              citations: [],
+              confidence: 0,
+              insufficient: true,
+            },
+          }));
+        }
+      } catch (error) {
+        console.error('Poll error:', error);
+        attempts++;
+        if (attempts < maxAttempts) {
+          setTimeout(poll, 1000);
+        } else {
+          setResponse(prev => ({
+            ...prev!,
+            status: 'error',
+            answer: {
+              answer: 'Failed to get results. Please try again.',
+              citations: [],
+              confidence: 0,
+              insufficient: true,
+            },
+          }));
         }
       }
     };
@@ -389,8 +627,9 @@ function AskPageContent() {
     );
   }
 
-  // Show Google connection prompt if not connected
-  if (!googleStatus?.connected) {
+  // Show Google connection prompt only if we've checked and confirmed it's not connected
+  // Don't show if we're still checking or if status is null (might still be loading)
+  if (checkingGoogle === false && googleStatus && !googleStatus.connected) {
     return (
       <main className={styles.main}>
         <header className={styles.header}>
@@ -480,7 +719,7 @@ function AskPageContent() {
         {response?.requires_extension && response.status !== 'complete' && (
           <div className={styles.extensionNotice}>
             <span className={styles.noticeIcon}>⏳</span>
-            Waiting for extension to search {response.sources_needed?.join(', ')}...
+            Opening {response.sources_needed?.join(' and ')} tabs and searching... This may take a moment.
           </div>
         )}
 
