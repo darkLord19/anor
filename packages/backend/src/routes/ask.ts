@@ -1,11 +1,21 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { verifyJWT, type AuthenticatedRequest } from '../middleware/auth.js';
-import { createUserClient } from '../lib/supabase.js';
+import { createUserClient, supabaseAdmin } from '../lib/supabase.js';
+import { analyzeQuery, planGmailQuery } from '../lib/openai.js';
+import { searchGmail } from '../lib/gmail.js';
+import { getCalendarEvents, refreshAccessToken } from '../lib/calendar.js';
+import { normalizeGmailResults, normalizeCalendarResults, mergeResults } from '../lib/normalizer.js';
+import { synthesizeAnswer } from '../lib/synthesizer.js';
+import { decryptTokens, encrypt } from '../lib/encryption.js';
+import type { SearchHit, PendingSearch, DOMInstruction } from '../types/search.js';
 
 const askRequestSchema = z.object({
   query: z.string().min(1).max(1000),
 });
+
+// In-memory store for pending searches (would use Redis in production)
+const pendingSearches = new Map<string, PendingSearch>();
 
 export async function askRoutes(fastify: FastifyInstance): Promise<void> {
   fastify.post('/ask', {
@@ -22,6 +32,9 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
+    const { query } = parseResult.data;
+    const requestId = crypto.randomUUID();
+
     // Create user-scoped Supabase client
     const supabase = createUserClient(authRequest.accessToken);
 
@@ -35,14 +48,289 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
 
     if (insertError) {
       fastify.log.error(insertError, 'Failed to insert usage event');
-      // Don't fail the request for analytics errors
     }
 
-    // Return stub response for now
+    // Get user's Google connection
+    const { data: googleConnection, error: connectionError } = await supabase
+      .from('google_connections')
+      .select('*')
+      .eq('user_id', authRequest.userId)
+      .single();
+
+    if (connectionError || !googleConnection) {
+      return reply.code(400).send({
+        error: 'Google account not connected',
+        code: 'GOOGLE_NOT_CONNECTED',
+      });
+    }
+
+    // Decrypt the stored tokens
+    let decryptedTokens;
+    try {
+      decryptedTokens = decryptTokens({
+        access_token: googleConnection.access_token,
+        refresh_token: googleConnection.refresh_token,
+      });
+    } catch (error) {
+      fastify.log.error(error, 'Failed to decrypt tokens');
+      return reply.code(500).send({
+        error: 'Failed to decrypt stored tokens. Please reconnect your account.',
+        code: 'DECRYPTION_FAILED',
+      });
+    }
+
+    // Check if token needs refresh
+    let accessToken = decryptedTokens.access_token;
+    const tokenExpiry = new Date(googleConnection.token_expires_at);
+    
+    if (tokenExpiry < new Date()) {
+      fastify.log.info('Refreshing Google access token');
+      try {
+        const newTokens = await refreshAccessToken(decryptedTokens.refresh_token);
+        
+        if (!newTokens.access_token) {
+          return reply.code(400).send({
+            error: 'Failed to refresh Google token. Please reconnect your account.',
+            code: 'TOKEN_REFRESH_FAILED',
+          });
+        }
+        
+        accessToken = newTokens.access_token;
+        
+        // Encrypt and update stored token (using admin client)
+        if (supabaseAdmin) {
+          const encryptedAccessToken = encrypt(accessToken);
+          await supabaseAdmin
+            .from('google_connections')
+            .update({
+              access_token: encryptedAccessToken,
+              token_expires_at: new Date(newTokens.expiry_date || Date.now() + 3600000).toISOString(),
+            })
+            .eq('user_id', authRequest.userId);
+        }
+      } catch (error) {
+        fastify.log.error(error, 'Failed to refresh Google token');
+        return reply.code(400).send({
+          error: 'Failed to refresh Google token. Please reconnect your account.',
+          code: 'TOKEN_REFRESH_FAILED',
+        });
+      }
+    }
+
+    try {
+      // Step 1: Analyze query to determine which sources are needed
+      fastify.log.info({ query }, 'Analyzing query');
+      const analysis = await analyzeQuery(query);
+      fastify.log.info({ analysis }, 'Query analysis complete');
+
+      const results: SearchHit[] = [];
+      const sourcesNeeded: string[] = [];
+      const domInstructions: DOMInstruction[] = [];
+
+      // Step 2: Fetch Gmail data if needed
+      if (analysis.needsGmail) {
+        sourcesNeeded.push('gmail');
+        try {
+          // Plan Gmail query
+          const gmailPlan = await planGmailQuery(query);
+          fastify.log.info({ gmailPlan }, 'Gmail query planned');
+
+          // Execute Gmail search
+          const gmailResults = await searchGmail(
+            accessToken,
+            gmailPlan.searchQuery,
+            gmailPlan.maxResults
+          );
+          
+          fastify.log.info({ count: gmailResults.messages.length }, 'Gmail search complete');
+          results.push(...normalizeGmailResults(gmailResults.messages));
+        } catch (error) {
+          fastify.log.error(error, 'Gmail search failed');
+        }
+      }
+
+      // Step 3: Fetch Calendar data if needed
+      if (analysis.needsCalendar) {
+        sourcesNeeded.push('calendar');
+        try {
+          const startDate = analysis.calendarDateRange?.start 
+            ? new Date(analysis.calendarDateRange.start) 
+            : undefined;
+          const endDate = analysis.calendarDateRange?.end 
+            ? new Date(analysis.calendarDateRange.end) 
+            : undefined;
+
+          const calendarResults = await getCalendarEvents(
+            accessToken,
+            startDate,
+            endDate
+          );
+          
+          fastify.log.info({ count: calendarResults.events.length }, 'Calendar fetch complete');
+          results.push(...normalizeCalendarResults(calendarResults.events));
+        } catch (error) {
+          fastify.log.error(error, 'Calendar fetch failed');
+        }
+      }
+
+      // Step 4: Check if extension sources are needed
+      const needsExtension = analysis.needsLinkedIn || analysis.needsWhatsApp;
+      
+      if (analysis.needsLinkedIn && analysis.linkedInKeywords?.length) {
+        sourcesNeeded.push('linkedin');
+        domInstructions.push({
+          request_id: requestId,
+          source: 'linkedin',
+          keywords: analysis.linkedInKeywords,
+        });
+      }
+      
+      if (analysis.needsWhatsApp && analysis.whatsAppKeywords?.length) {
+        sourcesNeeded.push('whatsapp');
+        domInstructions.push({
+          request_id: requestId,
+          source: 'whatsapp',
+          keywords: analysis.whatsAppKeywords,
+        });
+      }
+
+      // If extension is needed, store pending search and return early
+      if (needsExtension) {
+        const pendingSearch: PendingSearch = {
+          request_id: requestId,
+          user_id: authRequest.userId,
+          query,
+          requires_extension: true,
+          sources_needed: sourcesNeeded as PendingSearch['sources_needed'],
+          instructions: domInstructions,
+          results: {
+            gmail: results.filter(r => r.source === 'gmail'),
+            calendar: results.filter(r => r.source === 'calendar'),
+          },
+          status: 'pending',
+          created_at: new Date(),
+        };
+        
+        pendingSearches.set(requestId, pendingSearch);
+        
+        // Clean up old pending searches (older than 5 minutes)
+        const fiveMinutesAgo = Date.now() - 5 * 60 * 1000;
+        for (const [id, search] of pendingSearches) {
+          if (search.created_at.getTime() < fiveMinutesAgo) {
+            pendingSearches.delete(id);
+          }
+        }
+
+        return {
+          status: 'pending',
+          request_id: requestId,
+          requires_extension: true,
+          sources_needed: sourcesNeeded.filter(s => s === 'linkedin' || s === 'whatsapp'),
+          instructions: domInstructions,
+        };
+      }
+
+      // Step 5: Synthesize answer from results
+      const mergedResults = mergeResults(results);
+      fastify.log.info({ totalResults: mergedResults.length }, 'Synthesizing answer');
+      
+      const answer = await synthesizeAnswer(query, mergedResults);
+      
+      return {
+        status: 'complete',
+        request_id: requestId,
+        answer,
+        sources_searched: sourcesNeeded,
+      };
+
+    } catch (error) {
+      fastify.log.error(error, 'Ask processing failed');
+      return reply.code(500).send({
+        error: 'Failed to process query',
+        request_id: requestId,
+      });
+    }
+  });
+
+  // Get pending search status
+  fastify.get('/ask/:requestId/status', {
+    preHandler: verifyJWT,
+  }, async (request, reply) => {
+    const authRequest = request as AuthenticatedRequest;
+    const { requestId } = request.params as { requestId: string };
+
+    const pendingSearch = pendingSearches.get(requestId);
+    
+    if (!pendingSearch) {
+      return reply.code(404).send({ error: 'Search not found' });
+    }
+    
+    if (pendingSearch.user_id !== authRequest.userId) {
+      return reply.code(403).send({ error: 'Not authorized' });
+    }
+
     return {
-      status: 'stub',
-      request_id: crypto.randomUUID(),
-      message: 'Query received. Full processing not yet implemented.',
+      status: pendingSearch.status,
+      request_id: requestId,
+      sources_needed: pendingSearch.sources_needed,
+    };
+  });
+
+  // Submit DOM results from extension
+  fastify.post('/ask/:requestId/dom-results', {
+    preHandler: verifyJWT,
+  }, async (request, reply) => {
+    const authRequest = request as AuthenticatedRequest;
+    const { requestId } = request.params as { requestId: string };
+    const { source, snippets } = request.body as { source: string; snippets: string[] };
+
+    const pendingSearch = pendingSearches.get(requestId);
+    
+    if (!pendingSearch) {
+      return reply.code(404).send({ error: 'Search not found' });
+    }
+    
+    if (pendingSearch.user_id !== authRequest.userId) {
+      return reply.code(403).send({ error: 'Not authorized' });
+    }
+
+    // Store DOM results
+    const normalizedResults: SearchHit[] = snippets.map((snippet, index) => ({
+      id: `${source}-${index}`,
+      source: source as 'linkedin' | 'whatsapp',
+      content: snippet,
+      metadata: {},
+      relevance: 0.9,
+    }));
+
+    pendingSearch.results[source] = normalizedResults;
+
+    // Check if all sources are complete
+    const allSourcesComplete = pendingSearch.sources_needed.every(
+      src => pendingSearch.results[src] && pendingSearch.results[src]!.length >= 0
+    );
+
+    if (allSourcesComplete) {
+      pendingSearch.status = 'complete';
+      
+      // Synthesize final answer
+      const allResults = mergeResults(...Object.values(pendingSearch.results).filter(Boolean) as SearchHit[][]);
+      const answer = await synthesizeAnswer(pendingSearch.query, allResults);
+
+      // Clean up
+      pendingSearches.delete(requestId);
+
+      return {
+        status: 'complete',
+        request_id: requestId,
+        answer,
+      };
+    }
+
+    pendingSearch.status = 'partial';
+    return {
+      status: 'partial',
+      request_id: requestId,
     };
   });
 }

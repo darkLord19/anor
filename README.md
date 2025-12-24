@@ -53,10 +53,16 @@ OPENROUTER_API_KEY=your_openrouter_key
 OPENROUTER_MODEL=openai/gpt-4-turbo-preview
 APP_URL=http://localhost:3000
 
-# Google OAuth
+# Google OAuth (for Gmail/Calendar access)
 GOOGLE_CLIENT_ID=your_google_client_id
 GOOGLE_CLIENT_SECRET=your_google_client_secret
-GOOGLE_REDIRECT_URI=http://localhost:3001/auth/google/callback
+GOOGLE_REDIRECT_URI=http://localhost:3001/google/callback
+
+# Token encryption (generate with: openssl rand -base64 32)
+TOKEN_ENCRYPTION_SECRET=your_random_32_byte_secret
+
+# Web app URL (for OAuth redirects)
+WEBAPP_URL=http://localhost:3000
 ```
 
 **Web App** (`packages/webapp/.env.local`):
@@ -102,6 +108,7 @@ pnpm audit:privacy
 - ✅ 6-month date cap enforced on Gmail queries
 - ✅ All data processed in-memory only
 - ✅ No hardcoded credentials - all from environment variables
+- ✅ OAuth tokens encrypted at rest with AES-256-GCM
 
 ## Extension
 

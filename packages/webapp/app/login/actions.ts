@@ -1,6 +1,5 @@
 'use server';
 
-import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 
@@ -23,8 +22,8 @@ export async function login(formData: FormData): Promise<AuthResult> {
     return { error: error.message };
   }
 
-  revalidatePath('/', 'layout');
-  redirect('/ask');
+  // Return success - client will handle redirect
+  return { success: 'Login successful' };
 }
 
 export async function signup(formData: FormData): Promise<AuthResult> {

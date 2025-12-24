@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      google_connections: {
+        Row: {
+          id: string
+          user_id: string
+          google_email: string
+          access_token: string
+          refresh_token: string
+          token_expires_at: string
+          scopes: string[]
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          google_email: string
+          access_token: string
+          refresh_token: string
+          token_expires_at: string
+          scopes?: string[]
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          google_email?: string
+          access_token?: string
+          refresh_token?: string
+          token_expires_at?: string
+          scopes?: string[]
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string

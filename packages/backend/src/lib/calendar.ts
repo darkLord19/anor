@@ -84,3 +84,26 @@ export function getGoogleAuthUrl(state: string): string {
   });
 }
 
+// Exchange auth code for tokens
+export async function exchangeCodeForTokens(code: string): Promise<{
+  access_token?: string | null;
+  refresh_token?: string | null;
+  expiry_date?: number | null;
+}> {
+  const { tokens } = await oauth2Client.getToken(code);
+  return tokens;
+}
+
+// Refresh access token using refresh token
+export async function refreshAccessToken(refreshToken: string): Promise<{
+  access_token: string | null;
+  expiry_date: number | null;
+}> {
+  oauth2Client.setCredentials({ refresh_token: refreshToken });
+  const { credentials } = await oauth2Client.refreshAccessToken();
+  return {
+    access_token: credentials.access_token ?? null,
+    expiry_date: credentials.expiry_date ?? null,
+  };
+}
+

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import styles from './page.module.css';
-import { login, signup, loginWithGoogle, loginWithMagicLink } from './actions';
+import { signup, loginWithGoogle, loginWithMagicLink } from './actions';
 
 type AuthMode = 'login' | 'signup' | 'magic';
 
@@ -12,14 +12,14 @@ export default function LoginPage() {
   const [isError, setIsError] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const handleEmailPasswordSubmit = async (formData: FormData) => {
+
+  // Handle signup form submission
+  const handleSignup = async (formData: FormData) => {
     setMessage('');
     setIsError(false);
     
     startTransition(async () => {
-      const result = mode === 'signup' 
-        ? await signup(formData)
-        : await login(formData);
+      const result = await signup(formData);
       
       if (result?.error) {
         setMessage(result.error);
@@ -28,7 +28,6 @@ export default function LoginPage() {
         setMessage(result.success);
         setIsError(false);
       }
-      // If no result returned, redirect happened successfully
     });
   };
 
@@ -116,7 +115,11 @@ export default function LoginPage() {
             </button>
           </form>
         ) : (
-          <form action={handleEmailPasswordSubmit} className={styles.form}>
+          <form 
+            action={mode === 'login' ? '/api/login' : handleSignup}
+            method="POST"
+            className={styles.form}
+          >
             <input
               type="email"
               name="email"
@@ -125,7 +128,7 @@ export default function LoginPage() {
               disabled={isPending}
               autoComplete="email"
               required
-              defaultValue="test@example.com"
+              defaultValue={mode === 'login' ? 'test@example.com' : undefined}
             />
             <input
               type="password"
@@ -135,7 +138,7 @@ export default function LoginPage() {
               disabled={isPending}
               autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
               required
-              defaultValue="testpassword123"
+              defaultValue={mode === 'login' ? 'testpassword123' : undefined}
             />
             <button
               type="submit"
