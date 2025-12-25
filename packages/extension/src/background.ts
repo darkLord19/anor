@@ -183,47 +183,6 @@ async function handleMessage(message: Message): Promise<unknown> {
   }
 }
 
-// Get or create a tab for a source
-async function getOrCreateTab(source: 'linkedin' | 'whatsapp'): Promise<{ tab: chrome.tabs.Tab | null, isNew: boolean }> {
-  const url = source === 'linkedin'
-    ? 'https://www.linkedin.com/messaging/'
-    : 'https://web.whatsapp.com/';
-
-  const urlPattern = source === 'linkedin'
-    ? 'https://www.linkedin.com/messaging/*'
-    : 'https://web.whatsapp.com/*';
-
-  console.log(`[Anor Background] Checking for existing ${source} tab with pattern: ${urlPattern}`);
-
-  // First, check if a tab is already open
-  const existingTabs = await chrome.tabs.query({ url: urlPattern });
-  if (existingTabs.length > 0) {
-    console.log(`[Anor Background] Found existing ${source} tab:`, existingTabs[0]!.id, 'URL:', existingTabs[0]!.url);
-    return { tab: existingTabs[0]!, isNew: false };
-  }
-
-  // No tab found, create one in the background
-  console.log(`[Anor Background] No existing ${source} tab found, creating new one at URL: ${url}`);
-  try {
-    const newTab = await chrome.tabs.create({
-      url,
-      active: false, // Open in background
-    });
-
-    console.log(`[Anor Background] Created ${source} tab with ID:`, newTab.id, 'URL:', newTab.url || url);
-
-    // Wait for the tab to load
-    console.log(`[Anor Background] Waiting for ${source} tab to load...`);
-    await waitForTabToLoad(newTab.id!);
-
-    console.log(`[Anor Background] ${source} tab loaded successfully`);
-    return { tab: newTab, isNew: true };
-  } catch (error) {
-    console.error(`[Anor Background] Failed to create ${source} tab:`, error);
-    return { tab: null, isNew: false };
-  }
-}
-
 // Wait for a tab to finish loading
 async function waitForTabToLoad(tabId: number, maxWait = 30000): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -284,11 +243,18 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
 
   console.log(`[Anor Background] Starting DOM search for ${source} with keywords:`, keywords);
 
-  // Get or create the tab
-  const { tab, isNew } = await getOrCreateTab(source);
-
-  if (!tab || !tab.id) {
-    console.error(`[Anor Background] Failed to get or create ${source} tab`);
+  // ALWAYS create a new tab for search
+  const url = source === 'linkedin' ? 'https://www.linkedin.com/messaging/' : 'https://web.whatsapp.com/';
+  let tab: chrome.tabs.Tab | undefined;
+  
+  try {
+    tab = await chrome.tabs.create({
+      url,
+      active: false, // Open in background
+    });
+    console.log(`[Anor Background] Created new ${source} tab with ID:`, tab.id);
+  } catch (error) {
+    console.error(`[Anor Background] Failed to create ${source} tab:`, error);
     return {
       request_id,
       snippets: [],
@@ -297,98 +263,92 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
     };
   }
 
-  console.log(`[Anor Background] Tab ${tab.id} ready for ${source}, URL: ${tab.url}`);
+  if (!tab || !tab.id) {
+     return { request_id, snippets: [], source, error: 'Tab creation failed' };
+  }
 
-  // Wait longer for content script to inject, especially for newly opened tabs
-  // Content scripts run at document_idle, so we need to wait for the page to fully load
-  await new Promise(resolve => setTimeout(resolve, 2000));
+  try {
+    console.log(`[Anor Background] Tab ${tab.id} ready for ${source}, URL: ${tab.url}`);
 
-  // Check if content script is ready by trying to ping it
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, {
-        type: 'SEARCH_DOM',
-        payload: { keywords },
-      });
+    // Wait for initial load
+    await waitForTabToLoad(tab.id);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const allSnippets: string[] = [];
+    
+    for (const keyword of keywords) {
+      console.log(`[Anor Background] Processing keyword: "${keyword}"`);
       
-      console.log(`[Anor Background] Search successful for ${source}, found ${response.snippets?.length || 0} snippets`);
-      
-      return {
-        request_id,
-        snippets: response.snippets ?? [],
-        source,
-        error: response.error,
-      };
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      console.warn(`[Anor Background] Attempt ${attempt + 1} failed for ${source}:`, errorMsg);
-      
-      // Check if it's a "receiving end does not exist" error (content script not injected)
-      if (errorMsg.includes('receiving end') || errorMsg.includes('Could not establish connection')) {
-        console.log(`[Anor Background] Content script missing on tab ${tab.id} (${tab.url}). Attempting to inject...`);
+      try {
+        // 1. Navigate to the search URL
+        const targetUrl = new URL('https://www.linkedin.com/messaging/');
+        targetUrl.searchParams.set('searchTerm', keyword);
+        const targetUrlString = targetUrl.toString();
         
-        try {
-          // Determine which script to inject
-          const scriptFile = source === 'linkedin' ? 'content-linkedin.js' : 'content-whatsapp.js';
-          
-          await chrome.scripting.executeScript({
-            target: { tabId: tab.id! },
-            files: [scriptFile],
-          });
-          
-          console.log(`[Anor Background] Injected ${scriptFile} into tab ${tab.id}`);
-          
-          // Wait a bit for the script to initialize
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Retry immediately
-          continue;
-        } catch (injectError) {
-          console.error(`[Anor Background] Failed to inject script:`, injectError);
-          
-          // Fallback to reload if injection fails
-          if (!isNew && attempt === 0) {
-            console.log(`[Anor Background] Injection failed. Reloading tab ${tab.id}...`);
-            try {
-              await chrome.tabs.reload(tab.id!);
-              console.log(`[Anor Background] Tab ${tab.id} reloaded. Waiting for load...`);
-              await waitForTabToLoad(tab.id!);
-              await new Promise(resolve => setTimeout(resolve, 3000));
-              continue;
-            } catch (reloadError) {
-              console.error(`[Anor Background] Failed to reload tab ${tab.id}:`, reloadError);
+        console.log(`[Anor Background] Navigating tab ${tab.id} to ${targetUrlString}`);
+        await chrome.tabs.update(tab.id!, { url: targetUrlString });
+        
+        // 2. Wait for tab to load
+        await waitForTabToLoad(tab.id!);
+        
+        // 3. Send scrape command
+        console.log(`[Anor Background] Sending scrape command for keyword: "${keyword}"`);
+        
+        // Retry logic for sending message
+        let response = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            response = await chrome.tabs.sendMessage(tab.id!, {
+              type: 'SCRAPE_MESSAGES'
+            });
+            break; // Success
+          } catch (msgError) {
+            console.warn(`[Anor Background] Message attempt ${attempt + 1} failed:`, msgError);
+            
+            // If content script is missing, inject it
+            const errorMsg = String(msgError);
+            if (errorMsg.includes('receiving end') || errorMsg.includes('Could not establish connection')) {
+               const scriptFile = source === 'linkedin' ? 'content-linkedin.js' : 'content-whatsapp.js';
+               await chrome.scripting.executeScript({
+                  target: { tabId: tab.id! },
+                  files: [scriptFile],
+               });
+               await new Promise(r => setTimeout(r, 1000));
+            } else {
+               await new Promise(r => setTimeout(r, 1000));
             }
           }
         }
+        
+        if (response && response.snippets) {
+          console.log(`[Anor Background] Collected ${response.snippets.length} snippets for "${keyword}"`);
+          allSnippets.push(...response.snippets);
+        } else {
+          console.warn(`[Anor Background] No snippets collected for "${keyword}"`);
+        }
+        
+      } catch (keywordError) {
+        console.error(`[Anor Background] Error processing keyword "${keyword}":`, keywordError);
+      }
+    }
+    
+    return {
+      request_id,
+      snippets: allSnippets,
+      source,
+    };
 
-        // Wait longer and try again
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        continue;
-      }
-      
-      // Other errors, try one more time
-      if (attempt < 4) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        continue;
-      }
-      
-      // Final attempt failed
-      console.error(`[Anor Background] All attempts failed for ${source}`);
-      return {
-        request_id,
-        snippets: [],
-        source,
-        error: `Content script not ready or page not accessible: ${errorMsg}`,
-      };
+  } finally {
+    // Close the tab when done
+    if (tab && tab.id) {
+        try {
+            await chrome.tabs.remove(tab.id);
+            console.log(`[Anor Background] Closed ${source} tab ${tab.id}`);
+        } catch (e) {
+            console.error(`[Anor Background] Failed to close tab ${tab.id}`, e);
+        }
     }
   }
-
-  return {
-    request_id,
-    snippets: [],
-    source,
-    error: 'Content script failed to respond after multiple attempts',
-  };
 }
 
 // Execute DOM instructions directly (called from background script, not via message)

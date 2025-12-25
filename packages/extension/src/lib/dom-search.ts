@@ -118,7 +118,7 @@ export function extractSnippets(
     if (snippets.length >= maxSnippets) break;
     
     const text = element.textContent?.trim();
-    if (!text || text.length < 10) continue;
+    if (!text) continue;
     
     const lowerText = text.toLowerCase();
     
