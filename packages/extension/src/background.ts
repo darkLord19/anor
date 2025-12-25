@@ -1,4 +1,5 @@
 import { initSession, getAccessToken, signOut } from './lib/supabase.js';
+import { submitAskResults } from './lib/api.js';
 
 // Message types
 interface Message {
@@ -64,6 +65,21 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
   console.log('[Anor Background] Full message:', JSON.stringify(message, null, 2));
   console.log('[Anor Background] ===========================');
   
+  // Special handling for long-running instructions
+  if (message.type === 'EXECUTE_DOM_INSTRUCTIONS') {
+    const payload = message.payload as any;
+    sendResponse({ status: 'started', request_id: payload?.request_id });
+    
+    handleMessage(message)
+      .then(() => {
+        console.log('[Anor Background] Internal instructions handled successfully');
+      })
+      .catch((error) => {
+        console.error('[Anor Background] Error handling internal instructions:', error);
+      });
+    return false;
+  }
+
   handleMessage(message)
     .then((result) => {
       console.log('[Anor Background] Message handled successfully:', message.type);
@@ -96,26 +112,20 @@ chrome.runtime.onMessageExternal.addListener((message: Message, _sender, sendRes
   
   // Only handle EXECUTE_DOM_INSTRUCTIONS from external sources
   if (message.type === 'EXECUTE_DOM_INSTRUCTIONS') {
+    const payload = message.payload as any;
+    // Respond immediately to acknowledge receipt and avoid port timeout
+    sendResponse({ status: 'started', request_id: payload?.request_id });
+
     handleMessage(message)
-      .then((result) => {
+      .then(() => {
         console.log('[Anor Background] External message handled successfully:', message.type);
-        console.log('[Anor Background] Sending response:', result);
-        try {
-          sendResponse(result);
-        } catch (responseError) {
-          console.error('[Anor Background] Error sending external response:', responseError);
-        }
+        // Results are already submitted to backend in handleMessage
       })
       .catch((error) => {
         console.error('[Anor Background] Error handling external message:', message.type, error);
-        console.error('[Anor Background] Error stack:', error instanceof Error ? error.stack : 'No stack');
-        try {
-          sendResponse({ error: error.message });
-        } catch (responseError) {
-          console.error('[Anor Background] Error sending external error response:', responseError);
-        }
       });
-    return true; // Keep channel open for async response
+    
+    return false; // We already sent the response
   }
   
   // Ignore other message types from external sources
@@ -170,6 +180,23 @@ async function handleMessage(message: Message): Promise<unknown> {
         // Execute instructions directly in background script (don't use api.js which sends messages)
         const results = await executeDOMInstructionsDirect(request.payload.instructions);
         console.log('[Anor Background] All DOM instructions executed successfully');
+        
+        // Submit results to backend directly from background script for robustness
+        console.log('[Anor Background] Submitting results to backend...');
+        for (const result of results) {
+          try {
+            await submitAskResults(
+              request.payload.request_id,
+              result.source,
+              result.snippets,
+              result.error
+            );
+            console.log(`[Anor Background] Successfully submitted results for ${result.source}`);
+          } catch (submitError) {
+            console.error(`[Anor Background] Failed to submit results for ${result.source}:`, submitError);
+          }
+        }
+        
         return { success: true, results };
       } catch (error) {
         console.error('[Anor Background] Error executing DOM instructions:', error);
@@ -244,7 +271,15 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
   console.log(`[Anor Background] Starting DOM search for ${source} with keywords:`, keywords);
 
   // ALWAYS create a new tab for search
-  const url = source === 'linkedin' ? 'https://www.linkedin.com/messaging/' : 'https://web.whatsapp.com/';
+  let url = source === 'linkedin' ? 'https://www.linkedin.com/messaging/' : 'https://web.whatsapp.com/';
+  
+  // Optimization: For LinkedIn, start directly with the first keyword if available
+  if (source === 'linkedin' && keywords.length > 0 && keywords[0]) {
+      const targetUrl = new URL('https://www.linkedin.com/messaging/');
+      targetUrl.searchParams.set('searchTerm', keywords[0]);
+      url = targetUrl.toString();
+  }
+
   let tab: chrome.tabs.Tab | undefined;
   
   try {
@@ -276,7 +311,10 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
 
     const allSnippets: string[] = [];
     
-    for (const keyword of keywords) {
+    for (let i = 0; i < keywords.length; i++) {
+      const keyword = keywords[i];
+      if (!keyword) continue;
+      
       console.log(`[Anor Background] Processing keyword: "${keyword}"`);
       
       try {
@@ -285,11 +323,17 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
         targetUrl.searchParams.set('searchTerm', keyword);
         const targetUrlString = targetUrl.toString();
         
-        console.log(`[Anor Background] Navigating tab ${tab.id} to ${targetUrlString}`);
-        await chrome.tabs.update(tab.id!, { url: targetUrlString });
-        
-        // 2. Wait for tab to load
-        await waitForTabToLoad(tab.id!);
+        // Skip navigation if we're already on the correct URL (first keyword optimization)
+        if (source === 'linkedin' && i === 0) {
+             console.log(`[Anor Background] Already on search URL for first keyword: "${keyword}"`);
+             // No need to navigate or wait, we just did
+        } else {
+            console.log(`[Anor Background] Navigating tab ${tab.id} to ${targetUrlString}`);
+            await chrome.tabs.update(tab.id!, { url: targetUrlString });
+            
+            // 2. Wait for tab to load
+            await waitForTabToLoad(tab.id!);
+        }
         
         // 3. Send scrape command
         console.log(`[Anor Background] Sending scrape command for keyword: "${keyword}"`);
