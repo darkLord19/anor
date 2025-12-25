@@ -9,20 +9,10 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        background: resolve(__dirname, 'src/background.ts'),
-        'content-linkedin': resolve(__dirname, 'src/content/linkedin.ts'),
-        'content-whatsapp': resolve(__dirname, 'src/content/whatsapp.ts'),
-        'content-webapp': resolve(__dirname, 'src/content/webapp.ts'),
         'sidepanel/index': resolve(__dirname, 'src/sidepanel/index.html'),
       },
       output: {
-        entryFileNames: (chunkInfo) => {
-          // Keep sidepanel JS in sidepanel folder
-          if (chunkInfo.name === 'sidepanel/index') {
-            return 'sidepanel/index.js';
-          }
-          return '[name].js';
-        },
+        entryFileNames: 'sidepanel/index.js',
         chunkFileNames: 'chunks/[name]-[hash].js',
         assetFileNames: (assetInfo) => {
           // Output sidepanel HTML to sidepanel/index.html

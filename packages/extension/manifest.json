@@ -22,8 +22,7 @@
     "https://localhost/*"
   ],
   "background": {
-    "service_worker": "background.js",
-    "type": "module"
+    "service_worker": "background.js"
   },
   "action": {
     "default_title": "Anor"
@@ -35,8 +34,6 @@
     "matches": [
       "http://localhost:3000/*",
       "https://localhost:3000/*"
-      // NOTE: For production, add your web app URL here, e.g.:
-      // "https://your-domain.com/*"
     ]
   },
   "content_scripts": [
@@ -54,8 +51,6 @@
       "matches": [
         "http://localhost:3000/*",
         "https://localhost:3000/*"
-        // NOTE: For production, add your web app URL here, e.g.:
-        // "https://your-domain.com/*"
       ],
       "js": ["content-webapp.js"],
       "run_at": "document_start",
