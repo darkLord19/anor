@@ -37,6 +37,12 @@ interface GoogleStatus {
   needsRefresh?: boolean;
 }
 
+interface FeatureFlags {
+  enableLinkedIn: boolean;
+  enableWhatsApp: boolean;
+  enableAsyncMode: boolean;
+}
+
 
 function AskPageContent() {
   const [query, setQuery] = useState('');
@@ -47,6 +53,11 @@ function AskPageContent() {
   const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null);
   const [checkingGoogle, setCheckingGoogle] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
+  const [featureFlags, setFeatureFlags] = useState<FeatureFlags>({
+    enableLinkedIn: false,
+    enableWhatsApp: false,
+    enableAsyncMode: false,
+  });
   const hasCheckedRef = useRef(false);
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -263,18 +274,40 @@ function AskPageContent() {
       
       console.log('[ASK PAGE] Checking Google connection status...');
       
-      const res = await fetch(`${backendUrl}/google/status`, {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-        signal: controller.signal,
-      });
+      // Fetch Google status and feature flags in parallel
+      const [googleRes, flagsRes] = await Promise.all([
+        fetch(`${backendUrl}/google/status`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          signal: controller.signal,
+        }),
+        fetch(`${backendUrl}/account/feature-flags`, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+          },
+          signal: controller.signal,
+        }).catch(() => null), // Feature flags are optional
+      ]);
       
       clearTimeout(timeoutId);
       
-      if (res.ok) {
+      // Process feature flags
+      if (flagsRes && flagsRes.ok) {
         try {
-          const status = await res.json();
+          const flagsData = await flagsRes.json();
+          if (flagsData && flagsData.flags) {
+            setFeatureFlags(flagsData.flags);
+            console.log('[ASK PAGE] Feature flags loaded:', flagsData.flags);
+          }
+        } catch (e) {
+          console.warn('[ASK PAGE] Failed to parse feature flags:', e);
+        }
+      }
+      
+      if (googleRes.ok) {
+        try {
+          const status = await googleRes.json();
           console.log('[ASK PAGE] Google status received:', JSON.stringify(status));
           
           // Ensure status has at least connected property
@@ -290,8 +323,8 @@ function AskPageContent() {
           setGoogleStatus({ connected: false });
         }
       } else {
-        const errorText = await res.text().catch(() => 'Unknown error');
-        console.error('[ASK PAGE] Google status check failed:', res.status, res.statusText, errorText);
+        const errorText = await googleRes.text().catch(() => 'Unknown error');
+        console.error('[ASK PAGE] Google status check failed:', googleRes.status, googleRes.statusText, errorText);
         setGoogleStatus({ connected: false });
       }
     } catch (error) {
@@ -569,7 +602,7 @@ function AskPageContent() {
         }
         
         // Poll for results
-        pollForResults(data.request_id, sessionData.accessToken);
+        pollForResults(data.request_id, session.access_token);
       }
     } catch (error) {
       console.error('Ask error:', error);
@@ -761,7 +794,9 @@ function AskPageContent() {
           Anor
         </div>
         <div className={styles.headerRight}>
-          <ExtensionStatus connected={extensionConnected} />
+          {featureFlags.enableAsyncMode && (
+            <ExtensionStatus connected={extensionConnected} />
+          )}
           <div className={styles.userMenu}>
             <button 
               onClick={() => router.push('/settings')} 

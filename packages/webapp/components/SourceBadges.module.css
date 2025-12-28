@@ -85,6 +85,95 @@
   line-height: 1.5;
 }
 
+/* Email-like source cards */
+.sourceCard {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 1rem;
+  transition: all 0.2s ease;
+}
+
+.sourceCard:hover {
+  border-color: var(--border-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.sourceHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.sourceIcon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.sourceMeta {
+  flex: 1;
+  min-width: 0;
+}
+
+.sourceFrom {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sourceFrom span:first-child {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.sourceSubject {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  margin-bottom: 0.375rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.sourceSubject span:first-child {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sourceBody {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-subtle);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sourceLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent-primary);
+  text-decoration: none;
+  margin-top: 0.75rem;
+  transition: opacity 0.2s ease;
+}
+
+.sourceLink:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
 /* Source-specific colors */
 .gmail {
   border-color: rgba(234, 67, 53, 0.3);
@@ -118,3 +207,97 @@
   border-color: rgba(37, 211, 102, 0.6);
 }
 
+/* Sources list grid layout */
+.sourcesList {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.sourceCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.sourceNumber {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  font-family: var(--font-mono);
+}
+
+/* Email preview */
+.emailPreview {
+  margin-bottom: 0.5rem;
+}
+
+.emailField {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  margin-bottom: 0.25rem;
+}
+
+.emailLabel {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.emailValue {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emailBody {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Calendar preview */
+.calendarPreview {
+  margin-bottom: 0.5rem;
+}
+
+.calendarTitle {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 0.25rem;
+}
+
+.calendarDate {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+
+/* Generic message preview */
+.messagePreview {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+}
+
+/* Open link button */
+.openLink {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent-primary);
+  margin-top: 0.75rem;
+}
+
+/* Source card without link */
+.sourceCardNoLink {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
