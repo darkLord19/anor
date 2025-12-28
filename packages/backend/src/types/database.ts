@@ -95,6 +95,36 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_flags: {
+        Row: {
+          id: string
+          user_id: string | null
+          enable_linkedin: boolean | null
+          enable_whatsapp: boolean | null
+          enable_async_mode: boolean | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          enable_linkedin?: boolean | null
+          enable_whatsapp?: boolean | null
+          enable_async_mode?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          enable_linkedin?: boolean | null
+          enable_whatsapp?: boolean | null
+          enable_async_mode?: boolean | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

@@ -10,6 +10,9 @@ export interface SearchHit {
     sender?: string | undefined;
     subject?: string | undefined;
     attendees?: string[] | undefined;
+    messageId?: string | undefined; // Gmail message ID for linking
+    threadId?: string | undefined;  // Gmail thread ID
+    eventId?: string | undefined;   // Calendar event ID
   };
   relevance: number;
 }

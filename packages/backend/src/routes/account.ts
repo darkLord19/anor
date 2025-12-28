@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { verifyJWT, type AuthenticatedRequest } from '../proxy/auth.js';
 import { createUserClient, supabaseAdmin } from '../lib/supabase.js';
+import { getFeatureFlags, type FeatureFlags } from '../lib/feature-flags.js';
 
 const updateProfileSchema = z.object({
   name: z.string().min(1).optional(),
@@ -229,6 +230,30 @@ export async function accountRoutes(fastify: FastifyInstance): Promise<void> {
     } catch (error) {
       fastify.log.error(error, 'Account deletion error');
       return reply.code(500).send({ error: 'Failed to delete account' });
+    }
+  });
+
+  // Get feature flags for current user
+  fastify.get('/account/feature-flags', {
+    preHandler: verifyJWT,
+  }, async (request, _reply) => {
+    const authRequest = request as AuthenticatedRequest;
+    
+    try {
+      const flags = await getFeatureFlags(authRequest.userId);
+      return {
+        flags,
+      };
+    } catch (error) {
+      fastify.log.error(error, 'Failed to get feature flags');
+      // Return defaults on error
+      return {
+        flags: {
+          enableLinkedIn: false,
+          enableWhatsApp: false,
+          enableAsyncMode: false,
+        } as FeatureFlags,
+      };
     }
   });
 }

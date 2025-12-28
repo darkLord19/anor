@@ -14,6 +14,8 @@ export function normalizeGmailResults(messages: GmailMessage[]): SearchHit[] {
       date: msg.date,
       sender: msg.from,
       subject: msg.subject,
+      messageId: msg.id,
+      threadId: msg.threadId,
     },
     relevance: 1.0,
   }));
@@ -30,6 +32,7 @@ export function normalizeCalendarResults(events: CalendarEvent[]): SearchHit[] {
     metadata: {
       date: event.start,
       attendees: event.attendees,
+      eventId: event.id,
     },
     relevance: 0.8, // Calendar context is secondary
   }));

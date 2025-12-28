@@ -32,8 +32,8 @@ function getSixMonthsAgo(): string {
 function enforceQueryDateCap(query: string): string {
   const sixMonthsAgo = getSixMonthsAgo();
   
-  // If query already has an after: clause, don't modify it if it's within 6 months
-  if (query.includes('after:')) {
+  // If query already has an after: or newer_than: clause, don't modify it
+  if (query.includes('after:') || query.includes('newer_than:')) {
     return query;
   }
   

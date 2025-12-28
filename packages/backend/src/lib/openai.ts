@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
+import { getGmailQueryPlanPrompt, getQueryAnalysisPrompt } from './prompts.js';
 
 // Use OpenRouter with OpenAI SDK
 const openai = new OpenAI({
@@ -16,8 +17,20 @@ const DEFAULT_MODEL = process.env.OPENROUTER_MODEL ?? 'openai/gpt-4-turbo-previe
 
 // Schema for Gmail query plan
 export const GmailQueryPlanSchema = z.object({
-  searchQuery: z.string().describe('Gmail search query string'),
-  maxResults: z.number().min(1).max(50).default(10),
+  gmailQuery: z.string().describe('The optimized Gmail search query string'),
+  intent: z.enum(['search', 'count', 'summary', 'meetings']).describe('The intent of the user query'),
+  dateRange: z.object({
+    days: z.number().nullable(),
+  }).nullable(),
+  filters: z.object({
+    segments: z.array(z.string()),
+    negatedSegments: z.array(z.string()),
+    participants: z.array(z.string()).nullable(),
+    keywords: z.array(z.string()).nullable(),
+    hasAttachment: z.boolean().nullable(),
+    labels: z.array(z.string()).nullable(),
+    categories: z.array(z.string()).nullable(),
+  }),
   explanation: z.string().describe('Brief explanation of the search strategy'),
 });
 
@@ -42,28 +55,12 @@ export type QueryAnalysis = z.infer<typeof QueryAnalysisSchema>;
 
 // Convert natural language to Gmail search query
 export async function planGmailQuery(userQuery: string): Promise<GmailQueryPlan> {
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  const dateLimit = sixMonthsAgo.toISOString().split('T')[0]!.replace(/-/g, '/');
-
   const response = await openai.chat.completions.create({
     model: DEFAULT_MODEL,
     messages: [
       {
         role: 'system',
-        content: `You are a Gmail search query planner. Convert natural language queries into Gmail search syntax.
-
-IMPORTANT RULES:
-1. ALWAYS include "after:${dateLimit}" to limit results to the past 6 months
-2. Use Gmail search operators: from:, to:, subject:, has:attachment, is:unread, label:, etc.
-3. Use quotes for exact phrases
-4. Use OR for alternatives
-5. Keep queries focused and specific
-
-Respond with a JSON object containing:
-- searchQuery: The Gmail search query string (MUST include after: constraint)
-- maxResults: Suggested number of results (1-50)
-- explanation: Brief explanation of the search strategy`,
+        content: getGmailQueryPlanPrompt(),
       },
       {
         role: 'user',
@@ -87,44 +84,14 @@ Respond with a JSON object containing:
 export async function analyzeQuery(userQuery: string): Promise<QueryAnalysis> {
   // Get today's date for context
   const today = new Date();
-  const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+  const todayStr = today.toISOString().split('T')[0] ?? ''; // YYYY-MM-DD format
   
   const response = await openai.chat.completions.create({
     model: DEFAULT_MODEL,
     messages: [
       {
         role: 'system',
-        content: `You analyze user questions to determine which data sources are needed.
-
-IMPORTANT: Today's date is ${todayStr}. Use this as a reference point for calculating date ranges.
-
-Data sources available:
-- Gmail: For email-related questions (messages, conversations, attachments)
-- Calendar: For schedule, meetings, events
-- LinkedIn: For professional messages, job-related conversations
-- WhatsApp: For personal messages, chat conversations
-
-Analyze the query and determine:
-1. Which sources are needed (multiple can be true)
-2. Search parameters for each source
-
-For calendarDateRange:
-- Use today's date (${todayStr}) as the reference point
-- Calculate relative dates correctly (e.g., "this week" means the current week starting from ${todayStr})
-- Format dates as YYYY-MM-DD
-- If no specific date range is mentioned, use reasonable defaults based on today's date
-
-Respond with a JSON object:
-{
-  "needsGmail": boolean,
-  "needsCalendar": boolean,
-  "needsLinkedIn": boolean,
-  "needsWhatsApp": boolean,
-  "gmailQuery": "optional Gmail search query",
-  "calendarDateRange": { "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" },
-  "linkedInKeywords": ["keyword1", "keyword2"],
-  "whatsAppKeywords": ["keyword1", "keyword2"]
-}`,
+        content: getQueryAnalysisPrompt(todayStr),
       },
       {
         role: 'user',

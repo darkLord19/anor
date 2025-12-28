@@ -8,6 +8,7 @@ import { getCalendarEvents, refreshAccessToken } from '../lib/calendar.js';
 import { normalizeGmailResults, normalizeCalendarResults, mergeResults } from '../lib/normalizer.js';
 import { synthesizeAnswer } from '../lib/synthesizer.js';
 import { decryptTokens, encrypt } from '../lib/encryption.js';
+import { getFeatureFlags, filterAnalysisByFlags, isExtensionEnabled } from '../lib/feature-flags.js';
 import type { SearchHit, PendingSearch, DOMInstruction } from '../types/search.js';
 
 const askRequestSchema = z.object({
@@ -129,10 +130,20 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
     }
 
     try {
+      // Step 0: Get feature flags for user
+      const featureFlags = await getFeatureFlags(authRequest.userId);
+      fastify.log.info({ featureFlags }, 'Feature flags loaded');
+
       // Step 1: Analyze query to determine which sources are needed
       fastify.log.info({ query }, 'Analyzing query');
-      const analysis = await analyzeQuery(query);
-      fastify.log.info({ analysis }, 'Query analysis complete');
+      const rawAnalysis = await analyzeQuery(query);
+      
+      // Filter analysis based on feature flags (disable LinkedIn/WhatsApp if FF is off)
+      const analysis = {
+        ...rawAnalysis,
+        ...filterAnalysisByFlags(rawAnalysis, featureFlags),
+      };
+      fastify.log.info({ analysis, filteredByFlags: !isExtensionEnabled(featureFlags) }, 'Query analysis complete');
 
       const results: SearchHit[] = [];
       const sourcesNeeded: string[] = [];
@@ -148,11 +159,13 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
 
           // Execute Gmail search with retry on 401
           let gmailResults;
+          const maxResults = gmailPlan.intent === 'summary' || gmailPlan.intent === 'count' ? 20 : 10;
+          
           try {
             gmailResults = await searchGmail(
               accessToken,
-              gmailPlan.searchQuery,
-              gmailPlan.maxResults
+              gmailPlan.gmailQuery,
+              maxResults
             );
           } catch (error: any) {
             // If we get a 401, try refreshing the token and retry
@@ -167,8 +180,8 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
                 accessToken = await refreshAndUpdateToken();
                 gmailResults = await searchGmail(
                   accessToken,
-                  gmailPlan.searchQuery,
-                  gmailPlan.maxResults
+                  gmailPlan.gmailQuery,
+                  maxResults
                 );
               } catch (refreshError) {
                 fastify.log.error(refreshError, 'Failed to refresh token after 401');
@@ -236,8 +249,9 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
         }
       }
 
-      // Step 4: Check if extension sources are needed
-      const needsExtension = analysis.needsLinkedIn || analysis.needsWhatsApp;
+      // Step 4: Check if extension sources are needed (only if async mode is enabled)
+      const needsExtension = featureFlags.enableAsyncMode && 
+                            (analysis.needsLinkedIn || analysis.needsWhatsApp);
       
       if (analysis.needsLinkedIn && analysis.linkedInKeywords?.length) {
         sourcesNeeded.push('linkedin');
@@ -257,7 +271,12 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
         });
       }
 
-      // If extension is needed, store pending search and return early
+      // If async mode is disabled, skip extension and return sync response with Gmail/Calendar only
+      if (!featureFlags.enableAsyncMode && (analysis.needsLinkedIn || analysis.needsWhatsApp)) {
+        fastify.log.info('Async mode disabled - returning sync response with Gmail/Calendar only');
+      }
+
+      // If extension is needed AND async mode is enabled, store pending search and return early
       if (needsExtension) {
         const pendingSearch: PendingSearch = {
           request_id: requestId,
@@ -293,7 +312,9 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
         };
       }
 
-      // Step 5: Synthesize answer from results
+      // Step 5: Synthesize answer from results (sync response)
+      // Filter sources to only include what was actually searched
+      const actualSourcesSearched = sourcesNeeded.filter(s => s === 'gmail' || s === 'calendar');
       const mergedResults = mergeResults(results);
       fastify.log.info({ totalResults: mergedResults.length }, 'Synthesizing answer');
       
@@ -303,7 +324,7 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
         status: 'complete',
         request_id: requestId,
         answer,
-        sources_searched: sourcesNeeded,
+        sources_searched: actualSourcesSearched,
       };
 
     } catch (error) {
