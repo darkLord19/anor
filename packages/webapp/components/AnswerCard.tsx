@@ -42,6 +42,9 @@ function parseMarkdown(text: string, citations: Citation[]): string {
   });
 
   let html = text
+    // Remove "LINK to SOURCE" lines if they exist (safeguard)
+    .replace(/-\s*LINK to SOURCE:.*$/gim, '')
+    .replace(/LINK to SOURCE:.*$/gim, '')
     // Escape HTML entities first
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

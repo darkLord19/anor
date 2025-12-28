@@ -278,7 +278,6 @@ For CONTRACT queries:
   - Subject line of the email
   - List of attachments (MSA, Employment Contract, etc.)
   - Contract type description
-→ End with: "- LINK to SOURCE: [email reference]"
 
 For CONTACT/DECISION MAKER queries:
 → Lead with: "For [Company], the person in charge is **[Name]**, [Title]**"
@@ -325,7 +324,7 @@ For MEETING queries:
 Structure your 'answer' field as follows:
 1. Key insight (1-2 sentences) with **bold** for key data points
 2. Supporting details as bullets with specific values
-3. Source reference: "- LINK to SOURCE: [description with [N] citation]"
+3. Use [N] citations inline where relevant
 
 Example for pricing query:
 "Based on the latest email correspondence with BPI Learn on November 12, 2025, the last pricing you shared was:
@@ -333,9 +332,7 @@ Example for pricing query:
 - **EOR (Employer of Record) fee:** **€350 per person** (monthly, fixed fee)
 - **COR (Contractor of Record) fee:** **$300 per person** (€260 equivalent)
 
-This pricing for EOR was offered as an improvement on their existing provider's rate of €400 per person.
-
-- LINK to SOURCE: Email dated November 12, 2025 [1]"
+This pricing for EOR was offered as an improvement on their existing provider's rate of €400 per person [1]."
 
 === JSON OUTPUT FORMAT ===
 You must respond with a JSON object:
