@@ -267,6 +267,7 @@ function AskPageContent() {
   const checkGoogleConnection = useCallback(async (accessToken: string) => {
     try {
       const backendUrl = getBackendUrl();
+      console.log('[ASK PAGE] Using Backend URL:', backendUrl);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         console.warn('[ASK PAGE] Google status check timeout - aborting');

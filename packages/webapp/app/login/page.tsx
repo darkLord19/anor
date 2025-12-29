@@ -87,6 +87,11 @@ export default function LoginPage() {
             action={mode === 'login' ? '/api/login' : handleSignup}
             {...(mode === 'login' ? { method: 'POST' } : {})}
             className={styles.form}
+            onSubmit={() => {
+              if (mode === 'login') {
+                console.log('[Login Page] Submitting login form to /api/login');
+              }
+            }}
           >
             <input
               type="email"

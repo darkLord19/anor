@@ -5,6 +5,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 export async function POST(request: NextRequest) {
+  console.log('[API Login] Starting login request');
   let redirectResponse: NextResponse | null = null;
   
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -46,17 +47,22 @@ export async function POST(request: NextRequest) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
 
+  console.log('[API Login] Attempting sign in for:', email);
+
   const { data, error } = await supabase.auth.signInWithPassword({
     email,
     password,
   });
 
   if (error) {
+    console.error('[API Login] Sign in error:', error.message);
     return NextResponse.json(
       { error: error.message },
       { status: 400 }
     );
   }
+
+  console.log('[API Login] Sign in successful, session created:', !!data.session);
 
   if (!data.session) {
     return NextResponse.json(

@@ -40,6 +40,7 @@ export async function login(formData: FormData): Promise<AuthResult | never> {
 }
 
 export async function signup(formData: FormData): Promise<AuthResult> {
+  console.log('[Login Actions] Starting signup');
   const supabase = await createClient();
 
   const data = {
@@ -50,15 +51,18 @@ export async function signup(formData: FormData): Promise<AuthResult> {
   const { error } = await supabase.auth.signUp(data);
 
   if (error) {
+    console.error('[Login Actions] Signup error:', error.message);
     return { error: error.message };
   }
 
+  console.log('[Login Actions] Signup successful');
   return { success: 'Check your email to confirm your account!' };
 }
 
 import { getSiteUrl } from '@/lib/config';
 
 export async function loginWithMagicLink(formData: FormData): Promise<AuthResult> {
+  console.log('[Login Actions] Starting magic link login');
   const supabase = await createClient();
 
   const email = formData.get('email') as string;
@@ -71,8 +75,10 @@ export async function loginWithMagicLink(formData: FormData): Promise<AuthResult
   });
 
   if (error) {
+    console.error('[Login Actions] Magic link error:', error.message);
     return { error: error.message };
   }
 
+  console.log('[Login Actions] Magic link sent');
   return { success: 'Check your email for the magic link!' };
 }
