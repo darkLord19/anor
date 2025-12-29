@@ -11,14 +11,17 @@
     "clean": "rm -rf .next out"
   },
   "dependencies": {
+    "@dotor/shared": "workspace:*",
     "@dotor/ui": "workspace:*",
     "@supabase/ssr": "0.8.0",
     "@supabase/supabase-js": "2.89.0",
     "next": "16.1.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@dotor/tsconfig": "workspace:*",
     "@types/node": "^20.10.0",
     "@types/react": "19.2.3",
     "@types/react-dom": "19.2.3",
