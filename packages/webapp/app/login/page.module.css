@@ -43,59 +43,6 @@
   margin-bottom: 2rem;
 }
 
-.googleButton {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.75rem;
-  padding: 0.875rem 1.5rem;
-  background: white;
-  color: #333;
-  border: none;
-  border-radius: var(--radius);
-  font-size: 0.9375rem;
-  font-weight: 500;
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.googleButton:hover:not(:disabled) {
-  background: #f5f5f5;
-  transform: translateY(-1px);
-}
-
-.googleButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.googleIcon {
-  width: 20px;
-  height: 20px;
-}
-
-.divider {
-  display: flex;
-  align-items: center;
-  margin: 1.5rem 0;
-  color: var(--text-muted);
-  font-size: 0.875rem;
-}
-
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border-subtle);
-}
-
-.divider span {
-  padding: 0 1rem;
-}
-
 .form {
   display: flex;
   flex-direction: column;

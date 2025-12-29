@@ -56,27 +56,6 @@ export async function signup(formData: FormData): Promise<AuthResult> {
   return { success: 'Check your email to confirm your account!' };
 }
 
-export async function loginWithGoogle(): Promise<AuthResult> {
-  const supabase = await createClient();
-
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`,
-    },
-  });
-
-  if (error) {
-    return { error: error.message };
-  }
-
-  if (data.url) {
-    redirect(data.url);
-  }
-
-  return { error: 'Failed to get OAuth URL' };
-}
-
 export async function loginWithMagicLink(formData: FormData): Promise<AuthResult> {
   const supabase = await createClient();
 
