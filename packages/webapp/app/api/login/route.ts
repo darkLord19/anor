@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
         });
         
         const redirectUrl = new URL('/ask', request.url);
-        redirectResponse = NextResponse.redirect(redirectUrl);
+        redirectResponse = NextResponse.redirect(redirectUrl, { status: 303 });
         
         cookiesToSetArray.forEach(({ name, value, options }) => {
           const cookieOptions: CookieOptions = {
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     return redirectResponse;
   }
 
-  redirectResponse = NextResponse.redirect(new URL('/ask', request.url));
+  redirectResponse = NextResponse.redirect(new URL('/ask', request.url), { status: 303 });
   
   const urlParts = SUPABASE_URL.replace('https://', '').replace('http://', '').split('.');
   const projectRef = urlParts[0];
