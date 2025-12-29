@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Anor",
+  "name": "Dotor",
   "version": "0.1.0",
   "description": "Privacy-first personal assistant",
   "icons": {
@@ -27,7 +27,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Anor"
+    "default_title": "Dotor"
   },
   "side_panel": {
     "default_path": "sidepanel/index.html"

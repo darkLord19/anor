@@ -67,7 +67,7 @@ export default function LoginPage() {
       <div className={styles.card}>
         <div className={styles.logo}>
           <span className={styles.logoIcon}>✦</span>
-          Anor
+          Dotor
         </div>
         <h1 className={styles.title}>
           {mode === 'signup' ? 'Create account' : 'Welcome back'}

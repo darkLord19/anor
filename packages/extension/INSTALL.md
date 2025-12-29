@@ -1,4 +1,4 @@
-# Installing the Anor Chrome Extension
+# Installing the Dotor Chrome Extension
 
 ## Prerequisites
 
@@ -30,7 +30,7 @@
 
 4. **Verify Installation:**
    - Click the extension icon in the Chrome toolbar
-   - You should see the Anor popup
+   - You should see the Dotor popup
    - If you see errors, check the browser console (F12) and extension service worker logs
 
 ## Troubleshooting

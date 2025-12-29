@@ -36,7 +36,7 @@ async function run() {
       resolve: {
         alias: {
           '@': resolve(root, 'src'),
-          '@anor/ui': resolve(root, '../ui'),
+          '@dotor/ui': resolve(root, '../ui'),
         },
       },
     });

@@ -1,6 +1,6 @@
-# @anor/ui
+# @dotor/ui
 
-Shared UI package for Anor applications. Contains common styles, CSS variables, and utility functions used across webapp and extension.
+Shared UI package for Dotor applications. Contains common styles, CSS variables, and utility functions used across webapp and extension.
 
 ## Structure
 
@@ -16,7 +16,7 @@ Shared UI package for Anor applications. Contains common styles, CSS variables, 
 
 ```css
 /* In globals.css */
-@import '@anor/ui/styles';
+@import '@dotor/ui/styles';
 ```
 
 ### In Vite (extension)
@@ -26,7 +26,7 @@ The extension uses a Vite plugin to inject the styles during build. The styles a
 ### Importing utilities
 
 ```typescript
-import { showMessage, hideMessage, formatEmail } from '@anor/ui';
+import { showMessage, hideMessage, formatEmail } from '@dotor/ui';
 ```
 
 ## Building

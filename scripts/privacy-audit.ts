@@ -1,5 +1,5 @@
 /**
- * Privacy Audit Script for Anor
+ * Privacy Audit Script for Dotor
  * 
  * Verifies:
  * 1. No query content storage
@@ -105,7 +105,7 @@ function auditNoSnippetLogging(): { passed: boolean; details: string } {
     !m.includes('// ') &&
     !m.includes('.test.') &&
     !m.includes('.spec.') &&
-    !m.includes('[Anor]') // Our debug markers are OK
+    !m.includes('[Dotor]') // Our debug markers are OK
   );
   
   return {
@@ -228,7 +228,7 @@ function auditReadOnlyDOM(): { passed: boolean; details: string } {
 
 // Run all audits
 async function main(): Promise<void> {
-  console.log('🔒 Privacy Audit for Anor');
+  console.log('🔒 Privacy Audit for Dotor');
   console.log('='.repeat(50));
   
   runAudit('No query content storage', auditNoQueryStorage);

@@ -149,7 +149,7 @@ export async function executeDOMInstructions(
   await Promise.all(
     instructions.map(async (instruction) => {
       try {
-        console.log(`[Anor API] Executing instruction for ${instruction.source} with keywords:`, instruction.keywords);
+        console.log(`[Dotor API] Executing instruction for ${instruction.source} with keywords:`, instruction.keywords);
         
         const response = await chrome.runtime.sendMessage({
           type: 'DOM_SEARCH',
@@ -163,7 +163,7 @@ export async function executeDOMInstructions(
         const snippets = response.snippets ?? [];
         const error = response.error;
         
-        console.log(`[Anor API] Search completed for ${instruction.source}: ${snippets.length} snippets${error ? `, error: ${error}` : ''}`);
+        console.log(`[Dotor API] Search completed for ${instruction.source}: ${snippets.length} snippets${error ? `, error: ${error}` : ''}`);
         
         results.set(instruction.source, snippets);
 
@@ -177,9 +177,9 @@ export async function executeDOMInstructions(
           );
           
           if (submitResult.error) {
-            console.error(`[Anor API] Failed to submit results for ${instruction.source}:`, submitResult.error);
+            console.error(`[Dotor API] Failed to submit results for ${instruction.source}:`, submitResult.error);
           } else {
-            console.log(`[Anor API] Results submitted successfully for ${instruction.source}`);
+            console.log(`[Dotor API] Results submitted successfully for ${instruction.source}`);
           }
         } else {
           const submitResult = await submitResults(
@@ -190,11 +190,11 @@ export async function executeDOMInstructions(
           );
           
           if (submitResult.error) {
-            console.error(`[Anor API] Failed to submit results for ${instruction.source}:`, submitResult.error);
+            console.error(`[Dotor API] Failed to submit results for ${instruction.source}:`, submitResult.error);
           }
         }
       } catch (error) {
-        console.error(`[Anor API] Error executing instruction for ${instruction.source}:`, error);
+        console.error(`[Dotor API] Error executing instruction for ${instruction.source}:`, error);
         results.set(instruction.source, []);
         
         // Submit error to backend

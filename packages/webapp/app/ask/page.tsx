@@ -82,7 +82,7 @@ function AskPageContent() {
       // or by sending a ping message
       const isConnected = 
         typeof window !== 'undefined' && 
-        (window as any).__ANOR_EXTENSION__ === true;
+        (window as any).__DOTOR_EXTENSION__ === true;
       
       if (isConnected) {
         setExtensionConnected(true);
@@ -94,12 +94,12 @@ function AskPageContent() {
         const timeout = setTimeout(() => resolve(false), 1000);
         
         const messageHandler = (event: MessageEvent) => {
-          if (event.data && event.data.type === 'ANOR_EXTENSION_PONG') {
+          if (event.data && event.data.type === 'DOTOR_EXTENSION_PONG') {
             clearTimeout(timeout);
             window.removeEventListener('message', messageHandler);
             // Store extension ID if provided
             if (event.data.extensionId) {
-              (window as any).__ANOR_EXTENSION_ID__ = event.data.extensionId;
+              (window as any).__DOTOR_EXTENSION_ID__ = event.data.extensionId;
               console.log('[ASK PAGE] Stored extension ID from ping:', event.data.extensionId);
             }
             resolve(event.data.extensionId !== null);
@@ -109,7 +109,7 @@ function AskPageContent() {
         window.addEventListener('message', messageHandler);
         
         // Send ping
-        window.postMessage({ type: 'ANOR_EXTENSION_PING' }, window.location.origin);
+        window.postMessage({ type: 'DOTOR_EXTENSION_PING' }, window.location.origin);
       });
       
       const connected = await pingPromise;
@@ -124,11 +124,11 @@ function AskPageContent() {
     if (typeof window === 'undefined') return;
 
     const handleContextInvalidated = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'ANOR_EXTENSION_CONTEXT_INVALIDATED') {
+      if (event.data && event.data.type === 'DOTOR_EXTENSION_CONTEXT_INVALIDATED') {
         console.log('[ASK PAGE] Extension context invalidated - attempting direct messaging fallback');
         
         // Try direct messaging if we have the extension ID and payload
-        const extensionId = (window as any).__ANOR_EXTENSION_ID__;
+        const extensionId = (window as any).__DOTOR_EXTENSION_ID__;
         const payload = event.data.payload;
         
         if (extensionId && payload && typeof chrome !== 'undefined' && chrome.runtime) {
@@ -183,7 +183,7 @@ function AskPageContent() {
     if (typeof window === 'undefined') return;
 
     const handleExtensionResults = async (event: MessageEvent) => {
-      if (event.data && event.data.type === 'ANOR_EXTENSION_RESULTS') {
+      if (event.data && event.data.type === 'DOTOR_EXTENSION_RESULTS') {
         console.log('[ASK PAGE] Received results from extension:', event.data.payload);
         
         const { request_id, results } = event.data.payload;
@@ -246,7 +246,7 @@ function AskPageContent() {
     if (typeof window === 'undefined') return;
 
     const handleExtensionResults = (event: MessageEvent) => {
-      if (event.data && event.data.type === 'ANOR_EXTENSION_RESULTS') {
+      if (event.data && event.data.type === 'DOTOR_EXTENSION_RESULTS') {
         console.log('[ASK PAGE] Received results from extension via postMessage:', event.data.payload);
         
         const { request_id, results } = event.data.payload;
@@ -522,7 +522,7 @@ function AskPageContent() {
           
           // Set up listener for extension context invalidated
           const contextInvalidatedHandler = (event: MessageEvent) => {
-            if (event.data && event.data.type === 'ANOR_EXTENSION_CONTEXT_INVALIDATED') {
+            if (event.data && event.data.type === 'DOTOR_EXTENSION_CONTEXT_INVALIDATED') {
               window.removeEventListener('message', contextInvalidatedHandler);
               console.warn('[ASK PAGE] Extension context invalidated - extension may need to be reloaded');
               setExtensionConnected(false);
@@ -543,7 +543,7 @@ function AskPageContent() {
             
             // Try direct messaging via chrome.runtime.sendMessage (requires externally_connectable)
             // Check for extension ID from window object (set by content script)
-            let extensionId = (window as any).__ANOR_EXTENSION_ID__;
+            let extensionId = (window as any).__DOTOR_EXTENSION_ID__;
             
             // If no extension ID, try to get it by checking if extension is available
             if (!extensionId && typeof chrome !== 'undefined' && chrome.runtime) {
@@ -566,7 +566,7 @@ function AskPageContent() {
                       console.warn('[ASK PAGE] Direct messaging failed, falling back to window.postMessage:', errorMsg);
                       // Fallback to window.postMessage
                       window.postMessage({
-                        type: 'ANOR_EXECUTE_INSTRUCTIONS',
+                        type: 'DOTOR_EXECUTE_INSTRUCTIONS',
                         payload: message.payload,
                       }, window.location.origin);
                     } else {
@@ -581,7 +581,7 @@ function AskPageContent() {
                 console.warn('[ASK PAGE] Direct messaging error, falling back to window.postMessage:', directError);
                 // Fallback to window.postMessage
                 window.postMessage({
-                  type: 'ANOR_EXECUTE_INSTRUCTIONS',
+                  type: 'DOTOR_EXECUTE_INSTRUCTIONS',
                   payload: message.payload,
                 }, window.location.origin);
               }
@@ -589,7 +589,7 @@ function AskPageContent() {
               // No extension ID available or chrome.runtime not available, use window.postMessage
               console.log('[ASK PAGE] Using window.postMessage (direct messaging not available)');
               window.postMessage({
-                type: 'ANOR_EXECUTE_INSTRUCTIONS',
+                type: 'DOTOR_EXECUTE_INSTRUCTIONS',
                 payload: message.payload,
               }, window.location.origin);
             }
@@ -716,7 +716,7 @@ function AskPageContent() {
         <header className={styles.header}>
           <div className={styles.logo}>
             <span className={styles.logoIcon}>✦</span>
-            Anor
+            Dotor
           </div>
           <div className={styles.headerRight}>
             <div className={styles.userMenu}>
@@ -760,7 +760,7 @@ function AskPageContent() {
         <header className={styles.header}>
           <div className={styles.logo}>
             <span className={styles.logoIcon}>✦</span>
-            Anor
+            Dotor
           </div>
           <div className={styles.headerRight}>
             <div className={styles.userMenu}>
@@ -791,7 +791,7 @@ function AskPageContent() {
       <header className={styles.header}>
         <div className={styles.logo}>
           <span className={styles.logoIcon}>✦</span>
-          Anor
+          Dotor
         </div>
         <div className={styles.headerRight}>
           {featureFlags.enableAsyncMode && (
@@ -897,7 +897,7 @@ export default function AskPage() {
         <header className={styles.header}>
           <div className={styles.logo}>
             <span className={styles.logoIcon}>✦</span>
-            Anor
+            Dotor
           </div>
           <div className={styles.headerRight}>
             <div className={styles.userMenu}>

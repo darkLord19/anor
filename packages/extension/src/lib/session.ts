@@ -1,5 +1,5 @@
 // Storage key for session
-const SESSION_KEY = 'anor_session';
+const SESSION_KEY = 'dotor_session';
 
 export interface User {
   id: string;

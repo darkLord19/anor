@@ -12,7 +12,7 @@ If the extension UI looks unstyled or broken:
 
 2. **Reload the extension in Chrome:**
    - Go to `chrome://extensions/`
-   - Find "Anor" extension
+   - Find "Dotor" extension
    - Click the reload icon (circular arrow) on the extension card
    - Or toggle it off and on
 

@@ -62,4 +62,4 @@ function searchWhatsAppMessages(keywords: string[]): string[] {
 }
 
 // Log that content script is active (for debugging)
-console.log('[Anor] WhatsApp content script loaded');
+console.log('[Dotor] WhatsApp content script loaded');

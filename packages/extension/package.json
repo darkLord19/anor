@@ -1,5 +1,5 @@
 {
-  "name": "@anor/extension",
+  "name": "@dotor/extension",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@anor/ui": "workspace:*",
+    "@dotor/ui": "workspace:*",
     "@supabase/supabase-js": "2.89.0"
   },
   "devDependencies": {

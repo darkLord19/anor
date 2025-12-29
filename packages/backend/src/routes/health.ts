@@ -5,7 +5,7 @@ export async function healthRoutes(fastify: FastifyInstance): Promise<void> {
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      service: 'anor-backend',
+      service: 'dotor-backend',
     };
   });
 }

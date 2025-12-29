@@ -55,14 +55,14 @@ function sendMessageToBackground(message: any): Promise<any> {
       chrome.runtime.sendMessage(message, (response) => {
         if (chrome.runtime.lastError) {
           const errorMsg = chrome.runtime.lastError.message;
-          console.error('[Anor Webapp Content] chrome.runtime.lastError:', errorMsg);
+          console.error('[Dotor Webapp Content] chrome.runtime.lastError:', errorMsg);
           reject(new Error(errorMsg));
         } else {
           resolve(response);
         }
       });
     } catch (error) {
-      console.error('[Anor Webapp Content] Exception sending message:', error);
+      console.error('[Dotor Webapp Content] Exception sending message:', error);
       reject(error);
     }
   });
@@ -70,27 +70,27 @@ function sendMessageToBackground(message: any): Promise<any> {
 
 // Inject global variable to indicate extension is available
 if (typeof window !== 'undefined') {
-  console.log('[Anor Webapp Content] Initializing content script...');
+  console.log('[Dotor Webapp Content] Initializing content script...');
   
   // Initialize extension status safely
   let extensionValid = false;
   try {
     extensionValid = isExtensionContextValid();
-    console.log('[Anor Webapp Content] Extension context valid:', extensionValid);
+    console.log('[Dotor Webapp Content] Extension context valid:', extensionValid);
   } catch (error) {
-    console.error('[Anor Webapp Content] Error checking extension context:', error);
+    console.error('[Dotor Webapp Content] Error checking extension context:', error);
     extensionValid = false;
   }
   
-  (window as any).__ANOR_EXTENSION__ = extensionValid;
-  console.log('[Anor Webapp Content] Set __ANOR_EXTENSION__ to:', extensionValid);
+  (window as any).__DOTOR_EXTENSION__ = extensionValid;
+  console.log('[Dotor Webapp Content] Set __DOTOR_EXTENSION__ to:', extensionValid);
   
   // Also expose extension ID for direct messaging
   if (extensionValid) {
     const extensionId = getExtensionId();
     if (extensionId) {
-      (window as any).__ANOR_EXTENSION_ID__ = extensionId;
-      console.log('[Anor Webapp Content] Set __ANOR_EXTENSION_ID__ to:', extensionId);
+      (window as any).__DOTOR_EXTENSION_ID__ = extensionId;
+      console.log('[Dotor Webapp Content] Set __DOTOR_EXTENSION_ID__ to:', extensionId);
     }
   }
   
@@ -98,7 +98,7 @@ if (typeof window !== 'undefined') {
   window.addEventListener('message', (event) => {
     // Log ALL messages for debugging to see what's happening
     if (event.data && typeof event.data === 'object') {
-      console.log('[Anor Webapp Content] Received window message:', {
+      console.log('[Dotor Webapp Content] Received window message:', {
         type: event.data.type,
         origin: event.origin,
         currentOrigin: window.location.origin,
@@ -108,53 +108,53 @@ if (typeof window !== 'undefined') {
     
     // Only accept messages from the same origin
     if (event.origin !== window.location.origin) {
-      console.log('[Anor Webapp Content] Ignoring message from different origin:', event.origin);
+      console.log('[Dotor Webapp Content] Ignoring message from different origin:', event.origin);
       return;
     }
     
-    if (event.data && event.data.type === 'ANOR_EXTENSION_PING') {
+    if (event.data && event.data.type === 'DOTOR_EXTENSION_PING') {
       // Check if extension context is still valid
       const isValid = isExtensionContextValid();
       if (!isValid) {
         // Extension context invalidated - respond with no extension
-        (window as any).__ANOR_EXTENSION__ = false;
-        (window as any).__ANOR_EXTENSION_ID__ = undefined;
+        (window as any).__DOTOR_EXTENSION__ = false;
+        (window as any).__DOTOR_EXTENSION_ID__ = undefined;
         window.postMessage({
-          type: 'ANOR_EXTENSION_PONG',
+          type: 'DOTOR_EXTENSION_PONG',
           extensionId: null,
         }, window.location.origin);
         return;
       }
       
       // Update extension status and ID
-      (window as any).__ANOR_EXTENSION__ = true;
+      (window as any).__DOTOR_EXTENSION__ = true;
       const extensionId = getExtensionId();
       if (extensionId) {
-        (window as any).__ANOR_EXTENSION_ID__ = extensionId;
+        (window as any).__DOTOR_EXTENSION_ID__ = extensionId;
         window.postMessage({
-          type: 'ANOR_EXTENSION_PONG',
+          type: 'DOTOR_EXTENSION_PONG',
           extensionId: extensionId,
         }, window.location.origin);
       } else {
         // Context valid but no ID - shouldn't happen, but handle it
         window.postMessage({
-          type: 'ANOR_EXTENSION_PONG',
+          type: 'DOTOR_EXTENSION_PONG',
           extensionId: null,
         }, window.location.origin);
       }
-    } else if (event.data && event.data.type === 'ANOR_EXECUTE_INSTRUCTIONS') {
-      console.log('[Anor Webapp Content] Received ANOR_EXECUTE_INSTRUCTIONS:', event.data.payload);
+    } else if (event.data && event.data.type === 'DOTOR_EXECUTE_INSTRUCTIONS') {
+      console.log('[Dotor Webapp Content] Received DOTOR_EXECUTE_INSTRUCTIONS:', event.data.payload);
       
-      console.log('[Anor Webapp Content] Processing ANOR_EXECUTE_INSTRUCTIONS, attempting to forward to background...');
+      console.log('[Dotor Webapp Content] Processing DOTOR_EXECUTE_INSTRUCTIONS, attempting to forward to background...');
       
       // Check if extension context is valid before attempting to send
       // If invalid, notify webapp immediately so it can use direct messaging
       if (!isExtensionContextValid()) {
-        console.warn('[Anor Webapp Content] Extension context invalidated, cannot forward message');
-        (window as any).__ANOR_EXTENSION__ = false;
-        (window as any).__ANOR_EXTENSION_ID__ = undefined;
+        console.warn('[Dotor Webapp Content] Extension context invalidated, cannot forward message');
+        (window as any).__DOTOR_EXTENSION__ = false;
+        (window as any).__DOTOR_EXTENSION_ID__ = undefined;
         window.postMessage({
-          type: 'ANOR_EXTENSION_CONTEXT_INVALIDATED',
+          type: 'DOTOR_EXTENSION_CONTEXT_INVALIDATED',
           payload: event.data.payload,
         }, window.location.origin);
         return;
@@ -163,7 +163,7 @@ if (typeof window !== 'undefined') {
       // Update extension ID in case it wasn't set
       const extensionId = getExtensionId();
       if (extensionId) {
-        (window as any).__ANOR_EXTENSION_ID__ = extensionId;
+        (window as any).__DOTOR_EXTENSION_ID__ = extensionId;
       }
       
       // Helper function to send message (with minimal retry only for transient errors)
@@ -178,14 +178,14 @@ if (typeof window !== 'undefined') {
             payload: event.data.payload,
           };
           
-          console.log('[Anor Webapp Content] Sending message to background...');
-          console.log('[Anor Webapp Content] Message structure:', JSON.stringify(messageToSend, null, 2));
+          console.log('[Dotor Webapp Content] Sending message to background...');
+          console.log('[Dotor Webapp Content] Message structure:', JSON.stringify(messageToSend, null, 2));
           
           try {
             chrome.runtime.sendMessage(messageToSend, (response) => {
               if (chrome.runtime.lastError) {
                 const errorMsg = chrome.runtime.lastError.message || 'Unknown error';
-                console.error('[Anor Webapp Content] chrome.runtime.lastError:', errorMsg);
+                console.error('[Dotor Webapp Content] chrome.runtime.lastError:', errorMsg);
                 
                 // Check if it's a context invalidated error - don't retry these
                 const isContextError = 
@@ -196,22 +196,22 @@ if (typeof window !== 'undefined') {
                 
                 if (isContextError) {
                   // Context invalidated - update state and fail immediately
-                  (window as any).__ANOR_EXTENSION__ = false;
-                  (window as any).__ANOR_EXTENSION_ID__ = undefined;
+                  (window as any).__DOTOR_EXTENSION__ = false;
+                  (window as any).__DOTOR_EXTENSION_ID__ = undefined;
                   reject(new Error(errorMsg));
                 } else {
                   // Other error - might be transient, but fail anyway since webapp can retry with direct messaging
                   reject(new Error(errorMsg));
                 }
               } else {
-                console.log('[Anor Webapp Content] ✅ Instructions forwarded successfully!');
-                console.log('[Anor Webapp Content] Response from background:', response);
+                console.log('[Dotor Webapp Content] ✅ Instructions forwarded successfully!');
+                console.log('[Dotor Webapp Content] Response from background:', response);
                 
                 // If response contains results, forward them to the webapp
                 if (response && response.results) {
-                  console.log('[Anor Webapp Content] Forwarding results to webapp:', response.results);
+                  console.log('[Dotor Webapp Content] Forwarding results to webapp:', response.results);
                   window.postMessage({
-                    type: 'ANOR_EXTENSION_RESULTS',
+                    type: 'DOTOR_EXTENSION_RESULTS',
                     payload: {
                       request_id: event.data.payload.request_id,
                       results: response.results
@@ -225,11 +225,11 @@ if (typeof window !== 'undefined') {
           } catch (syncError) {
             // Synchronous error when calling sendMessage - context is definitely invalidated
             const errorMsg = syncError instanceof Error ? syncError.message : String(syncError);
-            console.error('[Anor Webapp Content] Synchronous error sending message:', errorMsg);
+            console.error('[Dotor Webapp Content] Synchronous error sending message:', errorMsg);
             
             // Update state and fail immediately
-            (window as any).__ANOR_EXTENSION__ = false;
-            (window as any).__ANOR_EXTENSION_ID__ = undefined;
+            (window as any).__DOTOR_EXTENSION__ = false;
+            (window as any).__DOTOR_EXTENSION_ID__ = undefined;
             reject(new Error(errorMsg));
           }
         });
@@ -238,12 +238,12 @@ if (typeof window !== 'undefined') {
       // Attempt to send message
       sendMessageToBackground()
         .catch((error) => {
-          console.error('[Anor Webapp Content] Failed to send instructions:', error);
+          console.error('[Dotor Webapp Content] Failed to send instructions:', error);
           
           // Notify webapp that extension context is invalidated
           // The webapp should then try direct messaging if it has the extension ID
           window.postMessage({
-            type: 'ANOR_EXTENSION_CONTEXT_INVALIDATED',
+            type: 'DOTOR_EXTENSION_CONTEXT_INVALIDATED',
             payload: event.data.payload,
           }, window.location.origin);
         });
@@ -254,7 +254,7 @@ if (typeof window !== 'undefined') {
       // This helps detect when extension is reloaded
       setInterval(() => {
         try {
-          const wasValid = (window as any).__ANOR_EXTENSION__ === true;
+          const wasValid = (window as any).__DOTOR_EXTENSION__ === true;
           let isValid = false;
           
           try {
@@ -265,42 +265,42 @@ if (typeof window !== 'undefined') {
           
           if (wasValid && !isValid) {
             // Extension was reloaded/disabled
-            (window as any).__ANOR_EXTENSION__ = false;
-            (window as any).__ANOR_EXTENSION_ID__ = undefined;
-            console.log('[Anor Webapp Content] Extension context invalidated - extension may have been reloaded');
+            (window as any).__DOTOR_EXTENSION__ = false;
+            (window as any).__DOTOR_EXTENSION_ID__ = undefined;
+            console.log('[Dotor Webapp Content] Extension context invalidated - extension may have been reloaded');
             // Don't send invalidated message from periodic check - only send when actively trying to use extension
           } else if (!wasValid && isValid) {
             // Extension was re-enabled/reloaded
-            (window as any).__ANOR_EXTENSION__ = true;
+            (window as any).__DOTOR_EXTENSION__ = true;
             const extensionId = getExtensionId();
             if (extensionId) {
-              (window as any).__ANOR_EXTENSION_ID__ = extensionId;
+              (window as any).__DOTOR_EXTENSION_ID__ = extensionId;
             }
-            console.log('[Anor] Extension context restored');
+            console.log('[Dotor] Extension context restored');
           } else if (isValid) {
             // Extension is still valid, make sure ID is set
             const extensionId = getExtensionId();
-            if (extensionId && (window as any).__ANOR_EXTENSION_ID__ !== extensionId) {
-              (window as any).__ANOR_EXTENSION_ID__ = extensionId;
+            if (extensionId && (window as any).__DOTOR_EXTENSION_ID__ !== extensionId) {
+              (window as any).__DOTOR_EXTENSION_ID__ = extensionId;
             }
           }
         } catch (error) {
           // Silently handle errors in the interval check
-          (window as any).__ANOR_EXTENSION__ = false;
+          (window as any).__DOTOR_EXTENSION__ = false;
         }
       }, 5000); // Check every 5 seconds (less frequent to avoid spam)
   
   // Log that content script is active (for debugging)
   try {
     const isValid = isExtensionContextValid();
-    console.log('[Anor Webapp Content] Content script loaded', isValid ? '(extension active)' : '(extension inactive)');
-    console.log('[Anor Webapp Content] Current URL:', window.location.href);
-    console.log('[Anor Webapp Content] Extension flag:', (window as any).__ANOR_EXTENSION__);
+    console.log('[Dotor Webapp Content] Content script loaded', isValid ? '(extension active)' : '(extension inactive)');
+    console.log('[Dotor Webapp Content] Current URL:', window.location.href);
+    console.log('[Dotor Webapp Content] Extension flag:', (window as any).__DOTOR_EXTENSION__);
   } catch (error) {
-    console.log('[Anor Webapp Content] Content script loaded (extension inactive)', error);
+    console.log('[Dotor Webapp Content] Content script loaded (extension inactive)', error);
   }
   
   // Also log when messages are received (for debugging)
-  console.log('[Anor Webapp Content] Message listener set up, waiting for messages...');
+  console.log('[Dotor Webapp Content] Message listener set up, waiting for messages...');
 }
 

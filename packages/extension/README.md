@@ -1,6 +1,6 @@
-# Anor Extension
+# Dotor Extension
 
-Chrome extension for Anor - Privacy-first personal assistant.
+Chrome extension for Dotor - Privacy-first personal assistant.
 
 ## Setup
 

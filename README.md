@@ -1,4 +1,4 @@
-# Anor
+# Dotor
 
 Privacy-first personal assistant that searches your emails, calendar, and messages without storing any data.
 
@@ -12,7 +12,7 @@ Privacy-first personal assistant that searches your emails, calendar, and messag
 ## Architecture
 
 ```
-anor/
+dotor/
 ├── packages/
 │   ├── backend/      # Fastify API + OpenRouter + Google APIs
 │   ├── extension/    # Chrome MV3 extension
@@ -35,7 +35,7 @@ anor/
 1. Clone and install:
 ```bash
 git clone <repo>
-cd anor
+cd dotor
 pnpm install
 ```
 

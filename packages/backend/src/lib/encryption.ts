@@ -11,7 +11,7 @@ function getEncryptionKey(): Buffer {
     throw new Error('TOKEN_ENCRYPTION_SECRET environment variable is required');
   }
   // Derive a 32-byte key from the secret using scrypt
-  return scryptSync(secret, 'anor-token-salt', 32);
+  return scryptSync(secret, 'dotor-token-salt', 32);
 }
 
 /**

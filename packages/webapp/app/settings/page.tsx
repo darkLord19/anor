@@ -283,7 +283,7 @@ export default function SettingsPage() {
       <header className={styles.header}>
         <div className={styles.logo}>
           <span className={styles.logoIcon}>✦</span>
-          Anor
+          Dotor
         </div>
         <div className={styles.headerRight}>
           <button 

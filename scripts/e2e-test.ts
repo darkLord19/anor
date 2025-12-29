@@ -1,5 +1,5 @@
 /**
- * E2E Test Script for Anor
+ * E2E Test Script for Dotor
  * 
  * Verifies:
  * 1. Auth flow (login/logout)
@@ -126,7 +126,7 @@ async function testCorsHeaders(): Promise<void> {
 
 // Run all tests
 async function main(): Promise<void> {
-  console.log('🚀 Starting E2E Tests for Anor');
+  console.log('🚀 Starting E2E Tests for Dotor');
   console.log(`   API: ${API_BASE}\n`);
   
   await runTest('Health check', testHealthCheck);

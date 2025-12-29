@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@anor/ui'],
+  transpilePackages: ['@dotor/ui'],
 };
 
 export default nextConfig;

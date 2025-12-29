@@ -41,7 +41,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
-      '@anor/ui': resolve(__dirname, '../ui'),
+      '@dotor/ui': resolve(__dirname, '../ui'),
     },
   },
   plugins: [

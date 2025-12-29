@@ -37,17 +37,17 @@ interface DOMInstructionsRequest {
 }
 
 // Log when background script starts
-console.log('[Anor Background] Background script loaded/started');
+console.log('[Dotor Background] Background script loaded/started');
 
 // Initialize session on startup
 chrome.runtime.onStartup.addListener(async () => {
-  console.log('[Anor Background] onStartup triggered');
+  console.log('[Dotor Background] onStartup triggered');
   // No need to init session with Supabase anymore
 });
 
 // Also initialize when extension is installed
 chrome.runtime.onInstalled.addListener(async () => {
-  console.log('[Anor Background] onInstalled triggered');
+  console.log('[Dotor Background] onInstalled triggered');
   // No need to init session with Supabase anymore
 });
 
@@ -60,11 +60,11 @@ chrome.action.onClicked.addListener(async (tab) => {
 
 // Handle messages from popup and content scripts
 chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) => {
-  console.log('[Anor Background] ===== MESSAGE RECEIVED =====');
-  console.log('[Anor Background] Message type:', message.type);
-  console.log('[Anor Background] Sender:', _sender?.tab?.url || _sender?.url || _sender?.id || 'unknown');
-  console.log('[Anor Background] Full message:', JSON.stringify(message, null, 2));
-  console.log('[Anor Background] ===========================');
+  console.log('[Dotor Background] ===== MESSAGE RECEIVED =====');
+  console.log('[Dotor Background] Message type:', message.type);
+  console.log('[Dotor Background] Sender:', _sender?.tab?.url || _sender?.url || _sender?.id || 'unknown');
+  console.log('[Dotor Background] Full message:', JSON.stringify(message, null, 2));
+  console.log('[Dotor Background] ===========================');
   
   // Special handling for long-running instructions
   if (message.type === 'EXECUTE_DOM_INSTRUCTIONS') {
@@ -73,31 +73,31 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
     
     handleMessage(message)
       .then(() => {
-        console.log('[Anor Background] Internal instructions handled successfully');
+        console.log('[Dotor Background] Internal instructions handled successfully');
       })
       .catch((error) => {
-        console.error('[Anor Background] Error handling internal instructions:', error);
+        console.error('[Dotor Background] Error handling internal instructions:', error);
       });
     return false;
   }
 
   handleMessage(message)
     .then((result) => {
-      console.log('[Anor Background] Message handled successfully:', message.type);
-      console.log('[Anor Background] Sending response:', result);
+      console.log('[Dotor Background] Message handled successfully:', message.type);
+      console.log('[Dotor Background] Sending response:', result);
       try {
         sendResponse(result);
       } catch (responseError) {
-        console.error('[Anor Background] Error sending response:', responseError);
+        console.error('[Dotor Background] Error sending response:', responseError);
       }
     })
     .catch((error) => {
-      console.error('[Anor Background] Error handling message:', message.type, error);
-      console.error('[Anor Background] Error stack:', error instanceof Error ? error.stack : 'No stack');
+      console.error('[Dotor Background] Error handling message:', message.type, error);
+      console.error('[Dotor Background] Error stack:', error instanceof Error ? error.stack : 'No stack');
       try {
         sendResponse({ error: error.message });
       } catch (responseError) {
-        console.error('[Anor Background] Error sending error response:', responseError);
+        console.error('[Dotor Background] Error sending error response:', responseError);
       }
     });
   return true; // Keep channel open for async response
@@ -105,11 +105,11 @@ chrome.runtime.onMessage.addListener((message: Message, _sender, sendResponse) =
 
 // Handle messages from external web pages (webapp)
 chrome.runtime.onMessageExternal.addListener((message: Message, _sender, sendResponse) => {
-  console.log('[Anor Background] ===== EXTERNAL MESSAGE RECEIVED =====');
-  console.log('[Anor Background] Message type:', message.type);
-  console.log('[Anor Background] Sender URL:', _sender?.url || 'unknown');
-  console.log('[Anor Background] Full message:', JSON.stringify(message, null, 2));
-  console.log('[Anor Background] ====================================');
+  console.log('[Dotor Background] ===== EXTERNAL MESSAGE RECEIVED =====');
+  console.log('[Dotor Background] Message type:', message.type);
+  console.log('[Dotor Background] Sender URL:', _sender?.url || 'unknown');
+  console.log('[Dotor Background] Full message:', JSON.stringify(message, null, 2));
+  console.log('[Dotor Background] ====================================');
   
   // Only handle EXECUTE_DOM_INSTRUCTIONS from external sources
   if (message.type === 'EXECUTE_DOM_INSTRUCTIONS') {
@@ -119,25 +119,25 @@ chrome.runtime.onMessageExternal.addListener((message: Message, _sender, sendRes
 
     handleMessage(message)
       .then(() => {
-        console.log('[Anor Background] External message handled successfully:', message.type);
+        console.log('[Dotor Background] External message handled successfully:', message.type);
         // Results are already submitted to backend in handleMessage
       })
       .catch((error) => {
-        console.error('[Anor Background] Error handling external message:', message.type, error);
+        console.error('[Dotor Background] Error handling external message:', message.type, error);
       });
     
     return false; // We already sent the response
   }
   
   // Ignore other message types from external sources
-  console.warn('[Anor Background] Ignoring external message type:', message.type);
+  console.warn('[Dotor Background] Ignoring external message type:', message.type);
   return false;
 });
 
 async function handleMessage(message: Message): Promise<unknown> {
   switch (message.type) {
     case 'PING': {
-      console.log('[Anor Background] Received PING - responding with PONG');
+      console.log('[Dotor Background] Received PING - responding with PONG');
       return { type: 'PONG', timestamp: Date.now() };
     }
 
@@ -163,8 +163,8 @@ async function handleMessage(message: Message): Promise<unknown> {
 
     case 'EXECUTE_DOM_INSTRUCTIONS': {
       const request = message as DOMInstructionsRequest;
-      console.log('[Anor Background] Received EXECUTE_DOM_INSTRUCTIONS');
-      console.log('[Anor Background] Payload:', JSON.stringify(request.payload, null, 2));
+      console.log('[Dotor Background] Received EXECUTE_DOM_INSTRUCTIONS');
+      console.log('[Dotor Background] Payload:', JSON.stringify(request.payload, null, 2));
       
       // Validate payload structure
       if (!request.payload) {
@@ -175,15 +175,15 @@ async function handleMessage(message: Message): Promise<unknown> {
         throw new Error('Missing or invalid instructions array in payload');
       }
       
-      console.log('[Anor Background] Processing', request.payload.instructions.length, 'instructions');
+      console.log('[Dotor Background] Processing', request.payload.instructions.length, 'instructions');
       
       try {
         // Execute instructions directly in background script (don't use api.js which sends messages)
         const results = await executeDOMInstructionsDirect(request.payload.instructions);
-        console.log('[Anor Background] All DOM instructions executed successfully');
+        console.log('[Dotor Background] All DOM instructions executed successfully');
         
         // Submit results to backend directly from background script for robustness
-        console.log('[Anor Background] Submitting results to backend...');
+        console.log('[Dotor Background] Submitting results to backend...');
         for (const result of results) {
           try {
             await submitAskResults(
@@ -192,21 +192,21 @@ async function handleMessage(message: Message): Promise<unknown> {
               result.snippets,
               result.error
             );
-            console.log(`[Anor Background] Successfully submitted results for ${result.source}`);
+            console.log(`[Dotor Background] Successfully submitted results for ${result.source}`);
           } catch (submitError) {
-            console.error(`[Anor Background] Failed to submit results for ${result.source}:`, submitError);
+            console.error(`[Dotor Background] Failed to submit results for ${result.source}:`, submitError);
           }
         }
         
         return { success: true, results };
       } catch (error) {
-        console.error('[Anor Background] Error executing DOM instructions:', error);
+        console.error('[Dotor Background] Error executing DOM instructions:', error);
         throw error; // Re-throw to be caught by message handler
       }
     }
 
     default:
-      console.warn('[Anor Background] Unknown message type:', message.type);
+      console.warn('[Dotor Background] Unknown message type:', message.type);
       throw new Error(`Unknown message type: ${message.type}`);
   }
 }
@@ -223,7 +223,7 @@ async function waitForTabToLoad(tabId: number, maxWait = 30000): Promise<void> {
         
         if (tab.status === 'complete' && !resolved) {
           resolved = true;
-          console.log(`[Anor Background] Tab ${tabId} loaded, waiting for content script...`);
+          console.log(`[Dotor Background] Tab ${tabId} loaded, waiting for content script...`);
           // Give content script more time to inject (document_idle)
           setTimeout(resolve, 2000);
           return;
@@ -252,7 +252,7 @@ async function waitForTabToLoad(tabId: number, maxWait = 30000): Promise<void> {
       if (updatedTabId === tabId && changeInfo.status === 'complete' && !resolved) {
         resolved = true;
         chrome.tabs.onUpdated.removeListener(listener);
-        console.log(`[Anor Background] Tab ${tabId} updated to complete, waiting for content script...`);
+        console.log(`[Dotor Background] Tab ${tabId} updated to complete, waiting for content script...`);
         // Give content script more time to inject
         setTimeout(resolve, 2000);
       }
@@ -269,7 +269,7 @@ async function waitForTabToLoad(tabId: number, maxWait = 30000): Promise<void> {
 async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DOMSearchResponse> {
   const { request_id, keywords, source } = payload;
 
-  console.log(`[Anor Background] Starting DOM search for ${source} with keywords:`, keywords);
+  console.log(`[Dotor Background] Starting DOM search for ${source} with keywords:`, keywords);
 
   // ALWAYS create a new tab for search
   let url = source === 'linkedin' ? 'https://www.linkedin.com/messaging/' : 'https://web.whatsapp.com/';
@@ -288,9 +288,9 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
       url,
       active: false, // Open in background
     });
-    console.log(`[Anor Background] Created new ${source} tab with ID:`, tab.id);
+    console.log(`[Dotor Background] Created new ${source} tab with ID:`, tab.id);
   } catch (error) {
-    console.error(`[Anor Background] Failed to create ${source} tab:`, error);
+    console.error(`[Dotor Background] Failed to create ${source} tab:`, error);
     return {
       request_id,
       snippets: [],
@@ -304,7 +304,7 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
   }
 
   try {
-    console.log(`[Anor Background] Tab ${tab.id} ready for ${source}, URL: ${tab.url}`);
+    console.log(`[Dotor Background] Tab ${tab.id} ready for ${source}, URL: ${tab.url}`);
 
     // Wait for initial load
     await waitForTabToLoad(tab.id);
@@ -316,7 +316,7 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
       const keyword = keywords[i];
       if (!keyword) continue;
       
-      console.log(`[Anor Background] Processing keyword: "${keyword}"`);
+      console.log(`[Dotor Background] Processing keyword: "${keyword}"`);
       
       try {
         // 1. Navigate to the search URL
@@ -326,10 +326,10 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
         
         // Skip navigation if we're already on the correct URL (first keyword optimization)
         if (source === 'linkedin' && i === 0) {
-             console.log(`[Anor Background] Already on search URL for first keyword: "${keyword}"`);
+             console.log(`[Dotor Background] Already on search URL for first keyword: "${keyword}"`);
              // No need to navigate or wait, we just did
         } else {
-            console.log(`[Anor Background] Navigating tab ${tab.id} to ${targetUrlString}`);
+            console.log(`[Dotor Background] Navigating tab ${tab.id} to ${targetUrlString}`);
             await chrome.tabs.update(tab.id!, { url: targetUrlString });
             
             // 2. Wait for tab to load
@@ -337,7 +337,7 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
         }
         
         // 3. Send scrape command
-        console.log(`[Anor Background] Sending scrape command for keyword: "${keyword}"`);
+        console.log(`[Dotor Background] Sending scrape command for keyword: "${keyword}"`);
         
         // Retry logic for sending message
         let response = null;
@@ -348,7 +348,7 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
             });
             break; // Success
           } catch (msgError) {
-            console.warn(`[Anor Background] Message attempt ${attempt + 1} failed:`, msgError);
+            console.warn(`[Dotor Background] Message attempt ${attempt + 1} failed:`, msgError);
             
             // If content script is missing, inject it
             const errorMsg = String(msgError);
@@ -366,14 +366,14 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
         }
         
         if (response && response.snippets) {
-          console.log(`[Anor Background] Collected ${response.snippets.length} snippets for "${keyword}"`);
+          console.log(`[Dotor Background] Collected ${response.snippets.length} snippets for "${keyword}"`);
           allSnippets.push(...response.snippets);
         } else {
-          console.warn(`[Anor Background] No snippets collected for "${keyword}"`);
+          console.warn(`[Dotor Background] No snippets collected for "${keyword}"`);
         }
         
       } catch (keywordError) {
-        console.error(`[Anor Background] Error processing keyword "${keyword}":`, keywordError);
+        console.error(`[Dotor Background] Error processing keyword "${keyword}":`, keywordError);
       }
     }
     
@@ -388,9 +388,9 @@ async function handleDOMSearch(payload: DOMSearchRequest['payload']): Promise<DO
     if (tab && tab.id) {
         try {
             await chrome.tabs.remove(tab.id);
-            console.log(`[Anor Background] Closed ${source} tab ${tab.id}`);
+            console.log(`[Dotor Background] Closed ${source} tab ${tab.id}`);
         } catch (e) {
-            console.error(`[Anor Background] Failed to close tab ${tab.id}`, e);
+            console.error(`[Dotor Background] Failed to close tab ${tab.id}`, e);
         }
     }
   }
@@ -412,7 +412,7 @@ async function executeDOMInstructionsDirect(
   const results = await Promise.all(
     instructions.map(async (instruction) => {
       try {
-        console.log(`[Anor Background] Executing instruction for ${instruction.source} with keywords:`, instruction.keywords);
+        console.log(`[Dotor Background] Executing instruction for ${instruction.source} with keywords:`, instruction.keywords);
         
         // Call handleDOMSearch directly (we're already in the background script)
         const response = await handleDOMSearch({
@@ -424,7 +424,7 @@ async function executeDOMInstructionsDirect(
         const snippets = response.snippets ?? [];
         const error = response.error;
         
-        console.log(`[Anor Background] Search completed for ${instruction.source}: ${snippets.length} snippets${error ? `, error: ${error}` : ''}`);
+        console.log(`[Dotor Background] Search completed for ${instruction.source}: ${snippets.length} snippets${error ? `, error: ${error}` : ''}`);
         
         return {
           source: instruction.source,
@@ -432,7 +432,7 @@ async function executeDOMInstructionsDirect(
           error
         };
       } catch (error) {
-        console.error(`[Anor Background] Error executing instruction for ${instruction.source}:`, error);
+        console.error(`[Dotor Background] Error executing instruction for ${instruction.source}:`, error);
         
         return {
           source: instruction.source,
