@@ -1,7 +1,7 @@
-import { createAuthClient } from '../../lib/supabase/index.js';
-import { AuthError } from '../../lib/errors/index.js';
+import { createAuthClient } from '../lib/supabase/index.js';
+import { AuthError } from '../lib/errors/index.js';
 import type { Logger } from '@dotor/logger';
-import type { LoginResult, SignupResult } from './auth.types.js';
+import type { LoginResult, SignupResult } from '../modules/auth/auth.types.js';
 
 export class AuthService {
   constructor(private readonly logger: Logger) {}

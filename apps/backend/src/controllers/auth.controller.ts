@@ -2,8 +2,8 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { authLoginSchema, authSignupSchema } from '@dotor/shared';
 import { HTTP_STATUS } from '@dotor/shared';
 import type { Logger } from '@dotor/logger';
-import { AuthService } from './auth.service.js';
-import { ValidationError } from '../../lib/errors/index.js';
+import { AuthService } from '../services/auth.service.js';
+import { ValidationError } from '../lib/errors/index.js';
 
 export class AuthController {
   private authService: AuthService;

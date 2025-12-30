@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { Logger } from '@dotor/logger';
-import { AuthController } from './auth.controller.js';
+import { AuthController } from '../../controllers/auth.controller.js';
 import rateLimit from '@fastify/rate-limit';
 
 export async function authRoutes(fastify: FastifyInstance, logger: Logger): Promise<void> {
