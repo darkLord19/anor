@@ -9,11 +9,11 @@ import { requestIdMiddleware } from './middleware/index.js';
 
 // Import route modules
 import { authRoutes } from './modules/auth/index.js';
-import { healthRoutes } from './routes/health.js';
+import { healthRoutes } from './modules/health/health.routes.js';
+import { accountRoutes } from './modules/account/account.routes.js';
 import { askRoutes } from './routes/ask.js';
 import { domRoutes } from './routes/dom.js';
 import { googleRoutes } from './routes/google.js';
-import { accountRoutes } from './routes/account.js';
 
 export async function buildApp() {
   const env = getEnv();
@@ -73,10 +73,10 @@ export async function buildApp() {
   await app.register(async (instance) => {
     await healthRoutes(instance);
     await authRoutes(instance, logger);
+    await accountRoutes(instance, logger);
     await askRoutes(instance);
     await domRoutes(instance);
     await googleRoutes(instance);
-    await accountRoutes(instance);
   });
 
   return { app, logger };
