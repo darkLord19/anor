@@ -12,8 +12,8 @@ import { authRoutes } from './modules/auth/index.js';
 import { healthRoutes } from './modules/health/health.routes.js';
 import { accountRoutes } from './modules/account/account.routes.js';
 import { googleRoutes } from './modules/google/google.routes.js';
+import { domRoutes } from './modules/dom/dom.routes.js';
 import { askRoutes } from './routes/ask.js';
-import { domRoutes } from './routes/dom.js';
 
 export async function buildApp() {
   const env = getEnv();
@@ -75,8 +75,8 @@ export async function buildApp() {
     await authRoutes(instance, logger);
     await accountRoutes(instance, logger);
     await googleRoutes(instance, logger);
+    await domRoutes(instance, logger);
     await askRoutes(instance);
-    await domRoutes(instance);
   });
 
   return { app, logger };
