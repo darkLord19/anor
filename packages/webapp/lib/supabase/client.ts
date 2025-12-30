@@ -1,6 +1,10 @@
 import { createBrowserClient } from '@supabase/ssr';
 
+let client: ReturnType<typeof createBrowserClient> | undefined;
+
 export function createClient() {
+  if (client) return client;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   
@@ -13,6 +17,7 @@ export function createClient() {
     console.error('Missing Supabase environment variables');
   }
   
-  // Don't cache - always create fresh to ensure latest auth state
-  return createBrowserClient(url ?? '', key ?? '');
+  // Create singleton client
+  client = createBrowserClient(url ?? '', key ?? '');
+  return client;
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getBackendUrl } from '@/lib/config';
+import type { AuthChangeEvent, Session } from '@supabase/supabase-js';
 import styles from './page.module.css';
 import { AnswerCard } from '@/components/AnswerCard';
 import { ConfidenceBar } from '@/components/ConfidenceBar';
@@ -369,59 +370,73 @@ function AskPageContent() {
   }, []);
 
   useEffect(() => {
-    if (hasCheckedRef.current) {
-      console.log('[ASK PAGE] Auth check already completed, skipping');
-      return;
-    }
-    
     let isMounted = true;
-    hasCheckedRef.current = true;
-    
-    const checkAuth = async () => {
-      console.log('[ASK PAGE] Starting auth check');
-      
-      try {
-        const supabase = createClient();
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error || !session) {
-          console.log('[ASK PAGE] No session found, redirecting to login');
-          if (isMounted) {
-            setCheckingGoogle(false);
-            setGoogleStatus({ connected: false });
-            router.push('/login');
-          }
-          return;
-        }
-        
-        if (!isMounted) return;
-        
-        setUser(session.user);
-        
-        // Check Google connection status
-        if (isMounted) {
-          await checkGoogleConnection(session.access_token);
-        }
-      } catch (error) {
-        if (!isMounted) return;
-        
-        console.error('[ASK PAGE] Auth check error:', error);
-        
-        setCheckingGoogle(false);
-        setGoogleStatus({ connected: false });
-        setInitError('Failed to initialize. Please refresh the page.');
-        // Don't redirect on error, let user see the error state
-      }
-    };
+    const supabase = createClient();
 
-    checkAuth().catch((error) => {
-      console.error('[ASK PAGE] Unhandled error in checkAuth:', error);
-      if (isMounted) {
-        setCheckingGoogle(false);
-        setGoogleStatus({ connected: false });
-        setInitError('Failed to initialize. Please refresh the page.');
+    // Set up auth state listener to handle token refreshes and signouts
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event: AuthChangeEvent, session: Session | null) => {
+      console.log(`[ASK PAGE] Auth state change: ${event}`);
+      
+      if (event === 'SIGNED_OUT' || !session) {
+        if (isMounted) {
+          router.push('/login');
+        }
+      } else if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {
+        if (isMounted && session) {
+          setUser(session.user);
+        }
       }
     });
+
+    // Initial check - only run once
+    if (!hasCheckedRef.current) {
+      hasCheckedRef.current = true;
+      
+      const checkAuth = async () => {
+        console.log('[ASK PAGE] Starting auth check');
+        
+        try {
+          const { data: { session }, error } = await supabase.auth.getSession();
+          
+          if (error || !session) {
+            console.log('[ASK PAGE] No session found, redirecting to login');
+            if (isMounted) {
+              setCheckingGoogle(false);
+              setGoogleStatus({ connected: false });
+              router.push('/login');
+            }
+            return;
+          }
+          
+          if (!isMounted) return;
+          
+          setUser(session.user);
+          
+          // Check Google connection status
+          if (isMounted) {
+            await checkGoogleConnection(session.access_token);
+          }
+        } catch (error) {
+          if (!isMounted) return;
+          
+          console.error('[ASK PAGE] Auth check error:', error);
+          
+          setCheckingGoogle(false);
+          setGoogleStatus({ connected: false });
+          setInitError('Failed to initialize. Please refresh the page.');
+          // Don't redirect on error, let user see the error state
+        }
+      };
+
+      checkAuth().catch((error) => {
+        console.error('[ASK PAGE] Unhandled error in checkAuth:', error);
+        if (isMounted) {
+          setCheckingGoogle(false);
+          setGoogleStatus({ connected: false });
+          setInitError('Failed to initialize. Please refresh the page.');
+        }
+      });
+    }
     
     // Check extension connection
     checkExtension();
@@ -436,6 +451,7 @@ function AskPageContent() {
     return () => {
       isMounted = false;
       clearInterval(extensionCheckInterval);
+      subscription.unsubscribe();
     };
   }, [router, checkExtension, checkGoogleConnection]);
 

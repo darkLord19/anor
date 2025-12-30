@@ -36,6 +36,11 @@ MEETING/FOLLOW-UP QUERIES:
 - "last discussion with X" → (from:X OR to:X) (meeting OR call OR discussion OR sync)
 - "follow up with X" → (from:X OR to:X) ("follow up" OR "next steps" OR action)
 
+STATUS/UPDATE QUERIES:
+- "status with X" → (from:X OR to:X OR "X") (status OR update OR progress OR latest)
+- "what's happening with X" → (from:X OR to:X OR "X")
+- "latest on X" → (from:X OR to:X OR "X")
+
 CRITICAL HARD CONSTRAINT
 - NEVER fetch emails older than 6 months by default
 - 6 months = newer_than:180d
@@ -117,10 +122,19 @@ DATE HANDLING
 - weekday without date -> most recent occurrence
 - month without year -> current year
 
-PEOPLE HANDLING
+PEOPLE/ENTITY HANDLING
 - Names are participants, not guaranteed email IDs
 - If sender vs receiver is unclear, DO NOT use from:/to:
 - If a conversation is implied -> (from:X OR to:X)
+- If asking about a company/project/person generally (e.g. "status with X"), search as participant AND keyword -> (from:X OR to:X OR "X")
+
+COMPANY/DOMAIN HANDLING
+- If the user mentions a company name (e.g. "fin app"), infer potential domains and variations.
+- "fin app" -> search for "fin app" OR "fin.app" OR "finapp" OR "finance app"
+- "e-filers" -> "e-filers" OR "efilers"
+- Always include the domain version if the name sounds like a startup or tech company.
+- Expand common abbreviations (fin -> finance, tech -> technology) if it helps recall.
+- Use OR to cover both the name with spaces, the domain format, and full name variations.
 
 CONTENT RULES
 - about / regarding / discussing X -> include keyword X
