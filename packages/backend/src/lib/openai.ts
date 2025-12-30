@@ -53,15 +53,28 @@ export const QueryAnalysisSchema = z.object({
 
 export type QueryAnalysis = z.infer<typeof QueryAnalysisSchema>;
 
+export interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+  metadata?: {
+    queryAnalysis?: QueryAnalysis;
+    gmailPlan?: GmailQueryPlan;
+  };
+}
+
 // Convert natural language to Gmail search query
-export async function planGmailQuery(userQuery: string): Promise<GmailQueryPlan> {
+export async function planGmailQuery(userQuery: string, conversationHistory: Message[] = []): Promise<GmailQueryPlan> {
   const response = await openai.chat.completions.create({
     model: DEFAULT_MODEL,
     messages: [
       {
         role: 'system',
-        content: getGmailQueryPlanPrompt(),
+        content: getGmailQueryPlanPrompt() + "\n\n=== CONVERSATION HISTORY ===\nUse the following conversation history to resolve references like 'him', 'her', 'it', 'that email'.",
       },
+      ...conversationHistory.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      })),
       {
         role: 'user',
         content: userQuery,
@@ -81,7 +94,7 @@ export async function planGmailQuery(userQuery: string): Promise<GmailQueryPlan>
 }
 
 // Analyze user query to determine which data sources are needed
-export async function analyzeQuery(userQuery: string): Promise<QueryAnalysis> {
+export async function analyzeQuery(userQuery: string, conversationHistory: Message[] = []): Promise<QueryAnalysis> {
   // Get today's date for context
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0] ?? ''; // YYYY-MM-DD format
@@ -91,8 +104,12 @@ export async function analyzeQuery(userQuery: string): Promise<QueryAnalysis> {
     messages: [
       {
         role: 'system',
-        content: getQueryAnalysisPrompt(todayStr),
+        content: getQueryAnalysisPrompt(todayStr) + "\n\n=== CONVERSATION HISTORY ===\nUse the following conversation history to understand context.",
       },
+      ...conversationHistory.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      })),
       {
         role: 'user',
         content: userQuery,

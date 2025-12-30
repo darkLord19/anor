@@ -51,16 +51,33 @@ export interface AnswerWithLinks {
 
 export type Answer = z.infer<typeof AnswerSchema>;
 
+export interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 /**
  * Synthesize an answer from search results
  * Uses only provided snippets - no hallucination
  */
 export async function synthesizeAnswer(
   userQuery: string,
-  results: SearchHit[]
+  results: SearchHit[],
+  conversationHistory: Message[] = []
 ): Promise<AnswerWithLinks> {
   // Handle empty results
   if (results.length === 0) {
+    // If we have conversation history, we might be able to answer from context even without new search results
+    // But for now, let's keep the behavior consistent or maybe check if it's a pure chat query?
+    // The prompt implies we are a search assistant, so if no results found for a query, we probably can't answer unless it's purely conversational.
+    // However, if the user asks a follow up that doesn't need new search (e.g. "summarize that"), we might have results from previous turn?
+    // But here we only get `results` passed in. The caller needs to decide if they want to pass previous results or if we re-search.
+    // Assuming the caller handles search, if we get 0 results for a follow up, it might be bad.
+    // But let's stick to the current logic: if no results, return insufficient, UNLESS we have history?
+    // Actually, if it's a follow up, maybe the search returned nothing because the query was "and him?" which is hard to search.
+    // The `analyzeQuery` should have handled converting "and him?" to a real query.
+    // So if we are here with 0 results, it means the search failed.
+    
     return {
       answer: 'I could not find any relevant information to answer your question.',
       citations: [],
@@ -86,21 +103,27 @@ export async function synthesizeAnswer(
     return parts.join('\n');
   }).join('\n\n');
 
-  const response = await openai.chat.completions.create({
-    model: DEFAULT_MODEL,
-    messages: [
-      {
-        role: 'system',
-        content: SYNTHESIZER_SYSTEM_PROMPT,
-      },
-      {
-        role: 'user',
-        content: `Question: ${userQuery}
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    {
+      role: 'system',
+      content: SYNTHESIZER_SYSTEM_PROMPT + "\n\n=== CONVERSATION HISTORY ===\nUse the following conversation history to understand context for follow-up questions. If the user asks 'what about him?', refer to the person discussed in previous messages.",
+    },
+    ...conversationHistory.map(msg => ({
+      role: msg.role,
+      content: msg.content,
+    })),
+    {
+      role: 'user',
+      content: `Question: ${userQuery}
 
 Search Results:
 ${formattedResults}`,
-      },
-    ],
+    },
+  ];
+
+  const response = await openai.chat.completions.create({
+    model: DEFAULT_MODEL,
+    messages,
     response_format: { type: 'json_object' },
     temperature: 0.1,
   });

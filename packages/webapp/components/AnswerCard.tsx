@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import styles from './AnswerCard.module.css';
+import { SourceBadges } from './SourceBadges';
 
 interface Citation {
   source: string;
@@ -38,6 +39,8 @@ function parseMarkdown(text: string, citations: Citation[]): string {
   citations.forEach((citation, index) => {
     if (citation.link) {
       citationLinks.set(index + 1, citation.link);
+    } else if (citation.source === 'gmail' && citation.id) {
+      citationLinks.set(index + 1, `https://mail.google.com/mail/u/0/#inbox/${citation.id}`);
     }
   });
 
@@ -119,6 +122,11 @@ export function AnswerCard({ answer }: AnswerCardProps) {
           dangerouslySetInnerHTML={{ __html: formattedAnswer }}
         />
       </div>
+      {answer.citations.length > 0 && (
+        <div className={styles.sourcesWrapper}>
+          <SourceBadges citations={answer.citations} />
+        </div>
+      )}
     </div>
   );
 }

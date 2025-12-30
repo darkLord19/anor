@@ -1,7 +1,8 @@
 .main {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .header {
@@ -23,6 +24,26 @@
 
 .logoIcon {
   color: var(--accent-primary);
+}
+
+.newChatButton {
+  padding: 0.5rem 1rem;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.newChatButton:hover {
+  border-color: var(--border-accent);
+  background: var(--bg-secondary);
 }
 
 .headerRight {
@@ -83,12 +104,18 @@
   width: 100%;
   margin: 0 auto;
   padding: 2rem;
+  padding-bottom: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .form {
-  margin-bottom: 2rem;
+  padding-top: 1rem;
+  padding-bottom: 2rem;
+  background: var(--bg-primary);
+  flex-shrink: 0;
+  z-index: 10;
 }
 
 .inputWrapper {
@@ -103,7 +130,55 @@
 
 .inputWrapper:focus-within {
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  box-shadow: 0 0 0 2px var(--accent-primary-alpha);
+}
+
+.messages {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 1rem;
+  /* Hide scrollbar for cleaner look but keep functionality */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-subtle) transparent;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  animation: fadeIn 0.3s ease;
+}
+
+.userMessage {
+  align-self: flex-end;
+  background: var(--bg-tertiary);
+  padding: 1rem 1.5rem;
+  border-radius: 1.5rem 1.5rem 0 1.5rem;
+  max-width: 80%;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.assistantMessage {
+  align-self: flex-start;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .input {
@@ -155,12 +230,6 @@
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .extensionNotice {
   display: flex;
   align-items: center;
@@ -185,7 +254,8 @@
 }
 
 .hints {
-  margin-top: 2rem;
+  margin-bottom: 2rem;
+  animation: fadeIn 0.5s ease;
 }
 
 .hints h3 {
@@ -244,6 +314,31 @@
   animation: spin 0.8s linear infinite;
 }
 
+.messageLoading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-subtle);
+  width: fit-content;
+}
+
+.messageLoading .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--accent-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.messageLoading p {
+  margin: 0;
+  font-size: 0.9375rem;
+}
 
 @media (max-width: 768px) {
   .header {

@@ -56,6 +56,12 @@
   text-decoration: underline;
 }
 
+.sourcesWrapper {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
 /* Sources section */
 .sources {
   margin-top: 1rem;

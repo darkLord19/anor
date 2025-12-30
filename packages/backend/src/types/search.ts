@@ -1,4 +1,5 @@
 import type { Answer } from '../lib/synthesizer.js';
+import type { GmailQueryPlan, QueryAnalysis } from '../lib/openai.js';
 
 // Unified search result format
 export interface SearchHit {
@@ -44,5 +45,10 @@ export interface PendingSearch {
   status: 'pending' | 'partial' | 'complete' | 'failed';
   created_at: Date;
   answer?: Answer;
+  conversation_id?: string;
+  metadata?: {
+    queryAnalysis?: QueryAnalysis;
+    gmailPlan?: GmailQueryPlan;
+  };
 }
 

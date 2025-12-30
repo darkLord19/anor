@@ -1,15 +1,48 @@
 .container {
-  padding: 1.5rem;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
+  /* Removed padding and background to blend into AnswerCard */
+  /* padding: 1.5rem; */
+  /* background: var(--bg-secondary); */
+  /* border: 1px solid var(--border-subtle); */
+  /* border-radius: var(--radius); */
+}
+
+.headerButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+}
+
+.chevron {
+  font-size: 0.75rem;
+  transition: transform 0.2s ease;
+  color: var(--text-secondary);
+}
+
+.chevron.collapsed {
+  transform: rotate(-90deg);
 }
 
 .title {
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 1rem;
+  margin: 0;
+}
+
+.sourcesList {
+  margin-top: 1rem;
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .badges {

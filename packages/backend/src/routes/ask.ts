@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { verifyJWT, type AuthenticatedRequest } from '../proxy/auth.js';
 import { createUserClient, supabaseAdmin } from '../lib/supabase.js';
-import { analyzeQuery, planGmailQuery } from '../lib/openai.js';
+import { analyzeQuery, planGmailQuery, type Message, type GmailQueryPlan } from '../lib/openai.js';
 import { searchGmail } from '../lib/gmail.js';
 import { getCalendarEvents, refreshAccessToken } from '../lib/calendar.js';
 import { normalizeGmailResults, normalizeCalendarResults, mergeResults } from '../lib/normalizer.js';
@@ -13,6 +13,7 @@ import type { SearchHit, PendingSearch, DOMInstruction } from '../types/search.j
 
 const askRequestSchema = z.object({
   query: z.string().min(1).max(1000),
+  conversationId: z.string().uuid().optional(),
 });
 
 // In-memory store for pending searches (would use Redis in production)
@@ -33,11 +34,62 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
-    const { query } = parseResult.data;
+    const { query, conversationId } = parseResult.data;
     const requestId = crypto.randomUUID();
 
     // Create user-scoped Supabase client
     const supabase = createUserClient(authRequest.accessToken);
+
+    // Clean up expired conversations for this user (older than 10 minutes)
+    const tenMinutesAgoISO = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    await supabase
+      .from('conversations')
+      .delete()
+      .eq('user_id', authRequest.userId)
+      .lt('updated_at', tenMinutesAgoISO);
+
+    // Handle conversation history
+    let conversationHistory: Message[] = [];
+    let currentConversationId = conversationId;
+
+    if (currentConversationId) {
+      const { data: conversation } = await supabase
+        .from('conversations')
+        .select('*')
+        .eq('id', currentConversationId)
+        .single();
+
+      if (conversation) {
+        // Check if expired (10 mins)
+        const updatedAt = new Date(conversation.updated_at);
+        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+        
+        if (updatedAt < tenMinutesAgo) {
+          // Expired - start new
+          currentConversationId = undefined;
+        } else {
+          conversationHistory = conversation.messages as unknown as Message[];
+        }
+      } else {
+        // Not found - start new
+        currentConversationId = undefined;
+      }
+    }
+
+    if (!currentConversationId) {
+      const { data: newConv } = await supabase
+        .from('conversations')
+        .insert([{
+          user_id: authRequest.userId,
+          messages: [],
+        }])
+        .select()
+        .single();
+        
+      if (newConv) {
+        currentConversationId = newConv.id;
+      }
+    }
 
     // Insert usage event (no query content stored - privacy first)
     const { error: insertError } = await supabase
@@ -136,7 +188,7 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
 
       // Step 1: Analyze query to determine which sources are needed
       fastify.log.info({ query }, 'Analyzing query');
-      const rawAnalysis = await analyzeQuery(query);
+      const rawAnalysis = await analyzeQuery(query, conversationHistory);
       
       // Filter analysis based on feature flags (disable LinkedIn/WhatsApp if FF is off)
       const analysis = {
@@ -148,13 +200,14 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
       const results: SearchHit[] = [];
       const sourcesNeeded: string[] = [];
       const domInstructions: DOMInstruction[] = [];
+      let gmailPlan: GmailQueryPlan | undefined;
 
       // Step 2: Fetch Gmail data if needed
       if (analysis.needsGmail) {
         sourcesNeeded.push('gmail');
         try {
           // Plan Gmail query
-          const gmailPlan = await planGmailQuery(query);
+          gmailPlan = await planGmailQuery(query, conversationHistory);
           fastify.log.info({ gmailPlan }, 'Gmail query planned');
 
           // Execute Gmail search with retry on 401
@@ -291,6 +344,11 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
           },
           status: 'pending',
           created_at: new Date(),
+          ...(currentConversationId ? { conversation_id: currentConversationId } : {}),
+          metadata: {
+            queryAnalysis: analysis,
+            ...(gmailPlan ? { gmailPlan } : {}),
+          },
         };
         
         pendingSearches.set(requestId, pendingSearch);
@@ -318,13 +376,38 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
       const mergedResults = mergeResults(results);
       fastify.log.info({ totalResults: mergedResults.length }, 'Synthesizing answer');
       
-      const answer = await synthesizeAnswer(query, mergedResults);
+      const answer = await synthesizeAnswer(query, mergedResults, conversationHistory);
       
+      // Update conversation history
+      if (currentConversationId) {
+        const updatedHistory: Message[] = [
+          ...conversationHistory,
+          { 
+            role: 'user', 
+            content: query,
+            metadata: {
+              queryAnalysis: analysis,
+              ...(gmailPlan ? { gmailPlan } : {}),
+            }
+          },
+          { role: 'assistant', content: answer.answer }
+        ];
+        
+        await supabase
+          .from('conversations')
+          .update({
+            messages: updatedHistory as any,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', currentConversationId);
+      }
+
       return {
         status: 'complete',
         request_id: requestId,
         answer,
         sources_searched: actualSourcesSearched,
+        conversationId: currentConversationId,
       };
 
     } catch (error) {
@@ -437,7 +520,45 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
       (async () => {
         try {
           const allResults = mergeResults(...Object.values(pendingSearch.results).filter(Boolean) as SearchHit[][]);
-          const answer = await synthesizeAnswer(pendingSearch.query, allResults);
+          
+          // Fetch conversation history if exists
+          let conversationHistory: Message[] = [];
+          const supabase = createUserClient(authRequest.accessToken);
+          
+          if (pendingSearch.conversation_id) {
+             const { data: conversation } = await supabase
+              .from('conversations')
+              .select('*')
+              .eq('id', pendingSearch.conversation_id)
+              .single();
+              
+             if (conversation) {
+               conversationHistory = conversation.messages as unknown as Message[];
+             }
+          }
+
+          const answer = await synthesizeAnswer(pendingSearch.query, allResults, conversationHistory);
+
+          // Update conversation history
+          if (pendingSearch.conversation_id) {
+            const updatedHistory: Message[] = [
+              ...conversationHistory,
+              { 
+                role: 'user', 
+                content: pendingSearch.query,
+                ...(pendingSearch.metadata ? { metadata: pendingSearch.metadata } : {})
+              },
+              { role: 'assistant', content: answer.answer }
+            ];
+            
+            await supabase
+              .from('conversations')
+              .update({
+                messages: updatedHistory as any,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', pendingSearch.conversation_id);
+          }
 
           // Store answer before cleanup (keep for a short time for polling)
           pendingSearch.answer = answer;

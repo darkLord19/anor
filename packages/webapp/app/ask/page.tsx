@@ -7,7 +7,6 @@ import { getBackendUrl } from '@/lib/config';
 import styles from './page.module.css';
 import { AnswerCard } from '@/components/AnswerCard';
 import { ConfidenceBar } from '@/components/ConfidenceBar';
-import { SourceBadges } from '@/components/SourceBadges';
 import { ExtensionStatus } from '@/components/ExtensionStatus';
 import { ConnectGoogle } from '@/components/ConnectGoogle';
 
@@ -22,12 +21,13 @@ interface Answer {
   insufficient: boolean;
 }
 
-interface AskResponse {
-  status: string;
-  request_id: string;
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content?: string;
   answer?: Answer;
-  requires_extension?: boolean;
-  sources_needed?: string[];
+  status?: 'pending' | 'processing' | 'complete' | 'failed';
+  requestId?: string;
 }
 
 interface GoogleStatus {
@@ -48,7 +48,8 @@ interface FeatureFlags {
 function AskPageContent() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<AskResponse | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const [user, setUser] = useState<{ email?: string } | null>(null);
   const [extensionConnected, setExtensionConnected] = useState(false);
   const [googleStatus, setGoogleStatus] = useState<GoogleStatus | null>(null);
@@ -60,8 +61,27 @@ function AskPageContent() {
     enableAsyncMode: false,
   });
   const hasCheckedRef = useRef(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const scrollToBottom = () => {
+    // Use setTimeout to ensure DOM has updated
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }, 150);
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setConversationId(undefined);
+    setQuery('');
+    setLoading(false);
+  };
 
   // Safety timeout to prevent infinite loading
   useEffect(() => {
@@ -487,8 +507,19 @@ function AskPageContent() {
     e.preventDefault();
     if (!query.trim() || loading) return;
 
+    const currentQuery = query;
+    setQuery('');
     setLoading(true);
-    setResponse(null);
+
+    // Add user message
+    const userMsgId = crypto.randomUUID();
+    const assistantMsgId = crypto.randomUUID();
+    
+    setMessages(prev => [
+      ...prev, 
+      { id: userMsgId, role: 'user', content: currentQuery },
+      { id: assistantMsgId, role: 'assistant', status: 'pending' }
+    ]);
 
     try {
       // Get session from Next.js API route
@@ -508,11 +539,30 @@ function AskPageContent() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ 
+          query: currentQuery,
+          conversationId 
+        }),
       });
 
       const data = await res.json();
-      setResponse(data);
+      
+      if (data.conversationId) {
+        setConversationId(data.conversationId);
+      }
+
+      // Update assistant message with initial response
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === assistantMsgId) {
+          return {
+            ...msg,
+            requestId: data.request_id,
+            status: data.status === 'complete' ? 'complete' : 'processing',
+            answer: data.answer
+          };
+        }
+        return msg;
+      }));
 
       if (data.requires_extension && data.request_id && data.instructions) {
         console.log('[ASK PAGE] Extension required, instructions:', data.instructions);
@@ -607,16 +657,21 @@ function AskPageContent() {
       }
     } catch (error) {
       console.error('Ask error:', error);
-      setResponse({
-        status: 'error',
-        request_id: '',
-        answer: {
-          answer: 'An error occurred. Please try again.',
-          citations: [],
-          confidence: 0,
-          insufficient: true,
-        },
-      });
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === assistantMsgId) {
+          return {
+            ...msg,
+            status: 'failed',
+            answer: {
+              answer: 'An error occurred. Please try again.',
+              citations: [],
+              confidence: 0,
+              insufficient: true,
+            }
+          };
+        }
+        return msg;
+      }));
     } finally {
       setLoading(false);
     }
@@ -645,18 +700,28 @@ function AskPageContent() {
         // If complete, fetch the full answer
         if (statusData.status === 'complete') {
           if (statusData.answer) {
-            setResponse(prev => ({
-              ...prev!,
-              status: 'complete',
-              answer: statusData.answer,
+            setMessages(prev => prev.map(msg => {
+              if (msg.requestId === requestId) {
+                return {
+                  ...msg,
+                  status: 'complete',
+                  answer: statusData.answer
+                };
+              }
+              return msg;
             }));
             return;
           }
           
           // Fallback: just mark as complete
-          setResponse(prev => ({
-            ...prev!,
-            status: 'complete',
+          setMessages(prev => prev.map(msg => {
+            if (msg.requestId === requestId) {
+              return {
+                ...msg,
+                status: 'complete'
+              };
+            }
+            return msg;
           }));
           return;
         }
@@ -667,15 +732,20 @@ function AskPageContent() {
           setTimeout(poll, 1000);
         } else {
           // Timeout - show error
-          setResponse(prev => ({
-            ...prev!,
-            status: 'error',
-            answer: {
-              answer: 'Search timed out. The extension is opening the required tabs automatically - this may take a moment. Please try again in a few seconds.',
-              citations: [],
-              confidence: 0,
-              insufficient: true,
-            },
+          setMessages(prev => prev.map(msg => {
+            if (msg.requestId === requestId) {
+              return {
+                ...msg,
+                status: 'failed',
+                answer: {
+                  answer: 'Search timed out. The extension is opening the required tabs automatically - this may take a moment. Please try again in a few seconds.',
+                  citations: [],
+                  confidence: 0,
+                  insufficient: true,
+                }
+              };
+            }
+            return msg;
           }));
         }
       } catch (error) {
@@ -684,15 +754,20 @@ function AskPageContent() {
         if (attempts < maxAttempts) {
           setTimeout(poll, 1000);
         } else {
-          setResponse(prev => ({
-            ...prev!,
-            status: 'error',
-            answer: {
-              answer: 'Failed to get results. Please try again.',
-              citations: [],
-              confidence: 0,
-              insufficient: true,
-            },
+          setMessages(prev => prev.map(msg => {
+            if (msg.requestId === requestId) {
+              return {
+                ...msg,
+                status: 'failed',
+                answer: {
+                  answer: 'Failed to get results. Please try again.',
+                  citations: [],
+                  confidence: 0,
+                  insufficient: true,
+                }
+              };
+            }
+            return msg;
           }));
         }
       }
@@ -790,9 +865,19 @@ function AskPageContent() {
   return (
     <main className={styles.main}>
       <header className={styles.header}>
-        <div className={styles.logo}>
-          <span className={styles.logoIcon}>✦</span>
-          Dotor
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div className={styles.logo}>
+            <span className={styles.logoIcon}>✦</span>
+            Dotor
+          </div>
+          {messages.length > 0 && (
+            <button onClick={handleNewChat} className={styles.newChatButton}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              New Chat
+            </button>
+          )}
         </div>
         <div className={styles.headerRight}>
           {featureFlags.enableAsyncMode && (
@@ -818,6 +903,59 @@ function AskPageContent() {
       </header>
 
       <div className={styles.container}>
+        {messages.length === 0 && !loading && (
+          <div className={styles.hints}>
+            <h3>Try asking:</h3>
+            <div className={styles.hintList}>
+              <button 
+                className={styles.hint} 
+                onClick={() => setQuery("What meetings do I have this week?")}
+              >
+                What meetings do I have this week?
+              </button>
+              <button 
+                className={styles.hint}
+                onClick={() => setQuery("Find emails from my manager about the project deadline")}
+              >
+                Find emails from my manager about the project deadline
+              </button>
+              <button 
+                className={styles.hint}
+                onClick={() => setQuery("What did John message me about on LinkedIn?")}
+              >
+                What did John message me about on LinkedIn?
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className={styles.messages}>
+          {messages.map((msg) => (
+            <div key={msg.id} className={`${styles.message} ${styles[msg.role]}`}>
+              {msg.role === 'user' ? (
+                <div className={styles.userMessage}>{msg.content}</div>
+              ) : (
+                <div className={styles.assistantMessage}>
+                  {msg.status === 'pending' || msg.status === 'processing' ? (
+                    <div className={styles.messageLoading}>
+                      <span className={styles.spinner} />
+                      <p>
+                        {msg.status === 'processing' ? 'Searching sources...' : 'Thinking...'}
+                      </p>
+                    </div>
+                  ) : msg.answer ? (
+                    <>
+                      <ConfidenceBar confidence={msg.answer.confidence} />
+                      <AnswerCard answer={msg.answer} />
+                    </>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ))}
+          <div ref={messagesEndRef} />
+        </div>
+
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.inputWrapper}>
             <input
@@ -843,49 +981,6 @@ function AskPageContent() {
             </button>
           </div>
         </form>
-
-        {response?.requires_extension && response.status !== 'complete' && (
-          <div className={styles.extensionNotice}>
-            <span className={styles.noticeIcon}>⏳</span>
-            Opening {response.sources_needed?.join(' and ')} tabs and searching... This may take a moment.
-          </div>
-        )}
-
-        {response?.answer && (
-          <div className={styles.results}>
-            <ConfidenceBar confidence={response.answer.confidence} />
-            <AnswerCard answer={response.answer} />
-            {response.answer.citations.length > 0 && (
-              <SourceBadges citations={response.answer.citations} />
-            )}
-          </div>
-        )}
-
-        {!response && !loading && (
-          <div className={styles.hints}>
-            <h3>Try asking:</h3>
-            <div className={styles.hintList}>
-              <button 
-                className={styles.hint} 
-                onClick={() => setQuery("What meetings do I have this week?")}
-              >
-                What meetings do I have this week?
-              </button>
-              <button 
-                className={styles.hint}
-                onClick={() => setQuery("Find emails from my manager about the project deadline")}
-              >
-                Find emails from my manager about the project deadline
-              </button>
-              <button 
-                className={styles.hint}
-                onClick={() => setQuery("What did John message me about on LinkedIn?")}
-              >
-                What did John message me about on LinkedIn?
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </main>
   );
