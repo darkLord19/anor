@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { getGmailQueryPlanPrompt, getQueryAnalysisPrompt } from './prompts.js';
+import type { FeatureFlags } from './feature-flags.js';
 
 // Use OpenRouter with OpenAI SDK
 const openai = new OpenAI({
@@ -94,7 +95,7 @@ export async function planGmailQuery(userQuery: string, conversationHistory: Mes
 }
 
 // Analyze user query to determine which data sources are needed
-export async function analyzeQuery(userQuery: string, conversationHistory: Message[] = []): Promise<QueryAnalysis> {
+export async function analyzeQuery(userQuery: string, conversationHistory: Message[] = [], flags: FeatureFlags): Promise<QueryAnalysis> {
   // Get today's date for context
   const today = new Date();
   const todayStr = today.toISOString().split('T')[0] ?? ''; // YYYY-MM-DD format
@@ -104,7 +105,7 @@ export async function analyzeQuery(userQuery: string, conversationHistory: Messa
     messages: [
       {
         role: 'system',
-        content: getQueryAnalysisPrompt(todayStr) + "\n\n=== CONVERSATION HISTORY ===\nUse the following conversation history to understand context.",
+        content: getQueryAnalysisPrompt(todayStr, flags) + "\n\n=== CONVERSATION HISTORY ===\nUse the following conversation history to understand context.",
       },
       ...conversationHistory.map(msg => ({
         role: msg.role,

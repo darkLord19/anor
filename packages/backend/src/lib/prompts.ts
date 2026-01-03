@@ -196,15 +196,30 @@ QUERY PRIORITIES
 Respond with JSON only.`;
 };
 
-export const getQueryAnalysisPrompt = (todayStr: string) => `You analyze user questions to determine which data sources are needed. This is a SALES-FOCUSED assistant.
+export const getQueryAnalysisPrompt = (todayStr: string, flags: { enableLinkedIn: boolean; enableWhatsApp: boolean; enableGmail: boolean }) => {
+  const { enableLinkedIn, enableWhatsApp, enableGmail } = flags;
+
+  const gmailRule = enableGmail 
+    ? "1. Gmail should be TRUE for almost all sales queries (it's the primary source)"
+    : "1. Gmail is DISABLED. Set needsGmail to FALSE.";
+
+  const linkedInRule = enableLinkedIn
+    ? "3. LinkedIn is ENABLED. Set needsLinkedIn to TRUE for queries about people, professional context, or messages."
+    : "3. LinkedIn is DISABLED. Set needsLinkedIn to FALSE.";
+
+  const whatsAppRule = enableWhatsApp
+    ? "4. WhatsApp is ENABLED. Set needsWhatsApp to TRUE for queries about people, chats, or recent conversations."
+    : "4. WhatsApp is DISABLED. Set needsWhatsApp to FALSE.";
+
+  return `You analyze user questions to determine which data sources are needed. This is a SALES-FOCUSED assistant.
 
 IMPORTANT: Today's date is ${todayStr}. Use this as a reference point for calculating date ranges.
 
 === DATA SOURCES AVAILABLE ===
-- Gmail: For email-related questions (messages, conversations, attachments, contracts, pricing discussions)
+${enableGmail ? "- Gmail: For email-related questions (messages, conversations, attachments, contracts, pricing discussions)" : ""}
 - Calendar: For schedule, meetings, events, planned calls
-- LinkedIn: For professional messages, job-related conversations (ONLY if specifically mentioned)
-- WhatsApp: For personal messages, chat conversations (ONLY if specifically mentioned)
+${enableLinkedIn ? "- LinkedIn: For professional messages, job-related conversations" : ""}
+${enableWhatsApp ? "- WhatsApp: For personal messages, chat conversations" : ""}
 
 === SALES-SPECIFIC PATTERNS ===
 When analyzing queries, recognize these common sales scenarios:
@@ -234,10 +249,10 @@ MEETING QUERIES:
 - "last call with X" → Calendar + Gmail (search for call, meeting, sync)
 
 === ANALYSIS RULES ===
-1. Gmail should be TRUE for almost all sales queries (it's the primary source)
+${gmailRule}
 2. Calendar should be TRUE when meetings, calls, schedule, or timelines are mentioned
-3. LinkedIn should be TRUE ONLY if user explicitly mentions LinkedIn messages or professional network
-4. WhatsApp should be TRUE ONLY if user explicitly mentions WhatsApp or personal chat
+${linkedInRule}
+${whatsAppRule}
 
 === DATE HANDLING ===
 - Use today's date (${todayStr}) as the reference point
@@ -256,6 +271,7 @@ Respond with a JSON object:
   "linkedInKeywords": ["keyword1", "keyword2"],
   "whatsAppKeywords": ["keyword1", "keyword2"]
 }`;
+};
 
 export const SYNTHESIZER_SYSTEM_PROMPT = `You are a SALES-FOCUSED workspace search assistant. Your ONLY job is to answer questions based ONLY on the provided search results from Gmail, Calendar, LinkedIn, and WhatsApp.
 

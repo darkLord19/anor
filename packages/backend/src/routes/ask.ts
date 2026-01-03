@@ -8,12 +8,17 @@ import { getCalendarEvents, refreshAccessToken } from '../lib/calendar.js';
 import { normalizeGmailResults, normalizeCalendarResults, mergeResults } from '../lib/normalizer.js';
 import { synthesizeAnswer } from '../lib/synthesizer.js';
 import { decryptTokens, encrypt } from '../lib/encryption.js';
-import { getFeatureFlags, filterAnalysisByFlags, isExtensionEnabled } from '../lib/feature-flags.js';
+import { getFeatureFlags, filterAnalysisByFlags, isExtensionEnabled, type FeatureFlags } from '../lib/feature-flags.js';
 import type { SearchHit, PendingSearch, DOMInstruction } from '../types/search.js';
 
 const askRequestSchema = z.object({
   query: z.string().min(1).max(1000),
   conversationId: z.string().uuid().optional(),
+  flags: z.object({
+    enableLinkedIn: z.boolean().optional(),
+    enableWhatsApp: z.boolean().optional(),
+    enableGmail: z.boolean().optional(),
+  }).optional(),
 });
 
 // In-memory store for pending searches (would use Redis in production)
@@ -34,7 +39,7 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
       });
     }
 
-    const { query, conversationId } = parseResult.data;
+    const { query, conversationId, flags: requestFlags } = parseResult.data;
     const requestId = crypto.randomUUID();
 
     // Create user-scoped Supabase client
@@ -183,17 +188,43 @@ export async function askRoutes(fastify: FastifyInstance): Promise<void> {
 
     try {
       // Step 0: Get feature flags for user
-      const featureFlags = await getFeatureFlags(authRequest.userId);
+      const dbFlags = await getFeatureFlags(authRequest.userId);
+      
+      // Merge flags from request
+      const featureFlags: FeatureFlags = {
+        ...dbFlags,
+        enableLinkedIn: requestFlags?.enableLinkedIn ?? dbFlags.enableLinkedIn,
+        enableWhatsApp: requestFlags?.enableWhatsApp ?? dbFlags.enableWhatsApp,
+        enableGmail: requestFlags?.enableGmail ?? dbFlags.enableGmail,
+      };
+      
       fastify.log.info({ featureFlags }, 'Feature flags loaded');
 
       // Step 1: Analyze query to determine which sources are needed
       fastify.log.info({ query }, 'Analyzing query');
-      const rawAnalysis = await analyzeQuery(query, conversationHistory);
+      const rawAnalysis = await analyzeQuery(query, conversationHistory, featureFlags);
       
       // Filter analysis based on feature flags (disable LinkedIn/WhatsApp if FF is off)
+      const filteredAnalysis = filterAnalysisByFlags(rawAnalysis, featureFlags);
+
+      // Force enable sources if flags are explicitly on (per user request)
+      if (featureFlags.enableWhatsApp) {
+        filteredAnalysis.needsWhatsApp = true;
+        if (!filteredAnalysis.whatsAppKeywords || filteredAnalysis.whatsAppKeywords.length === 0) {
+          filteredAnalysis.whatsAppKeywords = [query];
+        }
+      }
+
+      if (featureFlags.enableLinkedIn) {
+        filteredAnalysis.needsLinkedIn = true;
+        if (!filteredAnalysis.linkedInKeywords || filteredAnalysis.linkedInKeywords.length === 0) {
+          filteredAnalysis.linkedInKeywords = [query];
+        }
+      }
+
       const analysis = {
         ...rawAnalysis,
-        ...filterAnalysisByFlags(rawAnalysis, featureFlags),
+        ...filteredAnalysis,
       };
       fastify.log.info({ analysis, filteredByFlags: !isExtensionEnabled(featureFlags) }, 'Query analysis complete');
 

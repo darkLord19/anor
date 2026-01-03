@@ -10,6 +10,7 @@ import { AnswerCard } from '@/components/AnswerCard';
 import { ConfidenceBar } from '@/components/ConfidenceBar';
 import { ExtensionStatus } from '@/components/ExtensionStatus';
 import { ConnectGoogle } from '@/components/ConnectGoogle';
+import { DataSources } from '@/components/DataSources';
 
 interface Answer {
   answer: string;
@@ -60,6 +61,11 @@ function AskPageContent() {
     enableLinkedIn: false,
     enableWhatsApp: false,
     enableAsyncMode: false,
+  });
+  const [selectedFlags, setSelectedFlags] = useState({
+    enableGmail: true,
+    enableLinkedIn: false,
+    enableWhatsApp: false,
   });
   const hasCheckedRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -320,6 +326,11 @@ function AskPageContent() {
           const flagsData = await flagsRes.json();
           if (flagsData && flagsData.flags) {
             setFeatureFlags(flagsData.flags);
+            setSelectedFlags(prev => ({
+              ...prev,
+              enableLinkedIn: flagsData.flags.enableLinkedIn,
+              enableWhatsApp: flagsData.flags.enableWhatsApp,
+            }));
             console.log('[ASK PAGE] Feature flags loaded:', flagsData.flags);
           }
         } catch (e) {
@@ -557,7 +568,8 @@ function AskPageContent() {
         },
         body: JSON.stringify({ 
           query: currentQuery,
-          conversationId 
+          conversationId,
+          flags: selectedFlags,
         }),
       });
 
@@ -919,6 +931,12 @@ function AskPageContent() {
       </header>
 
       <div className={styles.container}>
+        <DataSources 
+          flags={selectedFlags} 
+          onChange={setSelectedFlags} 
+          extensionConnected={extensionConnected} 
+        />
+
         {messages.length === 0 && !loading && (
           <div className={styles.hints}>
             <h3>Try asking:</h3>

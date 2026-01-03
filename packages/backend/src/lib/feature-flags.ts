@@ -10,6 +10,9 @@ export interface FeatureFlags {
   enableLinkedIn: boolean;
   enableWhatsApp: boolean;
   
+  // API-based sources
+  enableGmail: boolean;
+
   // Response mode: sync (Gmail only) vs async (with extension)
   enableAsyncMode: boolean;
 }
@@ -18,6 +21,7 @@ export interface FeatureFlags {
 const DEFAULT_FLAGS: FeatureFlags = {
   enableLinkedIn: false,
   enableWhatsApp: false,
+  enableGmail: true,
   enableAsyncMode: false,
 };
 
@@ -30,6 +34,9 @@ function getEnvFlags(): Partial<FeatureFlags> {
   }
   if (process.env.FF_ENABLE_WHATSAPP !== undefined) {
     flags.enableWhatsApp = process.env.FF_ENABLE_WHATSAPP === 'true';
+  }
+  if (process.env.FF_ENABLE_GMAIL !== undefined) {
+    flags.enableGmail = process.env.FF_ENABLE_GMAIL === 'true';
   }
   if (process.env.FF_ENABLE_ASYNC_MODE !== undefined) {
     flags.enableAsyncMode = process.env.FF_ENABLE_ASYNC_MODE === 'true';
@@ -67,10 +74,12 @@ export async function getFeatureFlags(userId?: string): Promise<FeatureFlags> {
           .single();
         
         if (globalFlags) {
+          const gf = globalFlags as any;
           flags = {
-            enableLinkedIn: globalFlags.enable_linkedin ?? DEFAULT_FLAGS.enableLinkedIn,
-            enableWhatsApp: globalFlags.enable_whatsapp ?? DEFAULT_FLAGS.enableWhatsApp,
-            enableAsyncMode: globalFlags.enable_async_mode ?? DEFAULT_FLAGS.enableAsyncMode,
+            enableLinkedIn: gf.enable_linkedin ?? DEFAULT_FLAGS.enableLinkedIn,
+            enableWhatsApp: gf.enable_whatsapp ?? DEFAULT_FLAGS.enableWhatsApp,
+            enableGmail: gf.enable_gmail ?? DEFAULT_FLAGS.enableGmail,
+            enableAsyncMode: gf.enable_async_mode ?? DEFAULT_FLAGS.enableAsyncMode,
           };
           
           // Update cache
@@ -88,14 +97,18 @@ export async function getFeatureFlags(userId?: string): Promise<FeatureFlags> {
           .single();
         
         if (userFlags) {
-          if (userFlags.enable_linkedin !== null) {
-            flags.enableLinkedIn = userFlags.enable_linkedin;
+          const uf = userFlags as any;
+          if (uf.enable_linkedin !== null) {
+            flags.enableLinkedIn = uf.enable_linkedin;
           }
-          if (userFlags.enable_whatsapp !== null) {
-            flags.enableWhatsApp = userFlags.enable_whatsapp;
+          if (uf.enable_whatsapp !== null) {
+            flags.enableWhatsApp = uf.enable_whatsapp;
           }
-          if (userFlags.enable_async_mode !== null) {
-            flags.enableAsyncMode = userFlags.enable_async_mode;
+          if (uf.enable_gmail !== null && uf.enable_gmail !== undefined) {
+            flags.enableGmail = uf.enable_gmail;
+          }
+          if (uf.enable_async_mode !== null) {
+            flags.enableAsyncMode = uf.enable_async_mode;
           }
         }
       }
@@ -121,23 +134,27 @@ export function isExtensionEnabled(flags: FeatureFlags): boolean {
 
 /**
  * Filter analysis based on feature flags
- * Disables LinkedIn/WhatsApp if not enabled in flags
+ * Disables LinkedIn/WhatsApp/Gmail if not enabled in flags
  */
 export function filterAnalysisByFlags(
   analysis: {
+    needsGmail: boolean;
     needsLinkedIn: boolean;
     needsWhatsApp: boolean;
     linkedInKeywords?: string[] | null | undefined;
     whatsAppKeywords?: string[] | null | undefined;
+    [key: string]: any; // Allow other properties to pass through
   },
   flags: FeatureFlags
 ): {
+  needsGmail: boolean;
   needsLinkedIn: boolean;
   needsWhatsApp: boolean;
   linkedInKeywords: string[] | null;
   whatsAppKeywords: string[] | null;
 } {
   return {
+    needsGmail: flags.enableGmail && analysis.needsGmail,
     needsLinkedIn: flags.enableLinkedIn && analysis.needsLinkedIn,
     needsWhatsApp: flags.enableWhatsApp && analysis.needsWhatsApp,
     linkedInKeywords: flags.enableLinkedIn ? (analysis.linkedInKeywords ?? null) : null,

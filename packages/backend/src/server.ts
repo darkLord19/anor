@@ -31,9 +31,9 @@ async function buildServer() {
   const corsOrigin = process.env.CORS_ORIGIN;
   await fastify.register(cors, {
     origin: (origin, cb) => {
-      // Allow requests with no origin (like server-to-server)
+      // Allow requests with no origin (like server-to-server or curl)
       if (!origin) {
-        cb(new Error("Not allowed by CORS"), false);
+        cb(null, true);
         return;
       }
 
@@ -55,8 +55,8 @@ async function buildServer() {
         return;
       }
 
-      // If CORS_ORIGIN is not set, disallow all
-      cb(new Error("Not allowed by CORS"), false);
+      // If CORS_ORIGIN is not set, allow all (development mode)
+      cb(null, true);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],

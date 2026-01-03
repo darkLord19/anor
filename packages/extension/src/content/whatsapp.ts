@@ -113,8 +113,8 @@ async function performSearchAndScrape(keyword: string): Promise<string[]> {
 
   const snippets: string[] = [];
   
-  // Process top 3 results
-  const resultsToProcess = items.slice(0, 3);
+  // Process top 2 results
+  const resultsToProcess = items.slice(0, 2);
   
   for (const item of resultsToProcess) {
     try {
@@ -129,6 +129,9 @@ async function performSearchAndScrape(keyword: string): Promise<string[]> {
       
       // Wait for chat to load
       await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Scroll to gather more context
+      await scrollChat();
       
       // Scrape current chat
       // We pass the keyword to extract relevant snippets, but also get context
@@ -149,6 +152,54 @@ async function performSearchAndScrape(keyword: string): Promise<string[]> {
   }
   
   return snippets;
+}
+
+/**
+ * Scroll the chat up and down to trigger lazy loading
+ */
+async function scrollChat() {
+  let chatList = document.querySelector(SELECTORS.messageList) as HTMLElement;
+  
+  // Fallback: find the scrollable container within #main
+  if (!chatList) {
+    const main = document.querySelector('#main');
+    if (main) {
+      // The message list is usually a direct child or close descendant that is scrollable
+      // We look for an element with significant scrollHeight
+      const candidates = Array.from(main.querySelectorAll('div'));
+      // Find the one with the largest scrollHeight that is scrollable
+      chatList = candidates.reduce((best, curr) => {
+        if (curr.scrollHeight > curr.clientHeight && curr.clientHeight > 100) {
+          if (!best || curr.scrollHeight > best.scrollHeight) {
+            return curr;
+          }
+        }
+        return best;
+      }, null as HTMLElement | null) as HTMLElement;
+    }
+  }
+
+  if (!chatList) {
+    console.warn('[Dotor] Could not find scrollable chat list');
+    return;
+  }
+  
+  console.log('[Dotor] Found chat list, scrolling...', { 
+    scrollHeight: chatList.scrollHeight, 
+    scrollTop: chatList.scrollTop,
+    clientHeight: chatList.clientHeight 
+  });
+  
+  // Scroll up a bit to load context
+  const currentScroll = chatList.scrollTop;
+  chatList.scrollTop = Math.max(0, currentScroll - 500);
+  chatList.dispatchEvent(new Event('scroll', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 1000));
+  
+  // Scroll down a bit
+  chatList.scrollTop = Math.min(chatList.scrollHeight, currentScroll + 500);
+  chatList.dispatchEvent(new Event('scroll', { bubbles: true }));
+  await new Promise(r => setTimeout(r, 1000));
 }
 
 /**
